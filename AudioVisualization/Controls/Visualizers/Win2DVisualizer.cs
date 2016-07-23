@@ -11,6 +11,9 @@ using Windows.Foundation;
 using Windows.UI;
 using SampleGrabberCS.Reference;
 using AudioVisualization.Services;
+using System.Diagnostics;
+using System.Collections.Generic;
+using Microsoft.Graphics.Canvas.Text;
 
 namespace AudioVisualization.Controls.Visualizers
 {
@@ -33,7 +36,7 @@ namespace AudioVisualization.Controls.Visualizers
 
         protected override void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (e!=null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            if (e != null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
                 SetDevice(_device, e.NewSize);
                 _swapChainVisual.Size = new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height);
@@ -42,6 +45,10 @@ namespace AudioVisualization.Controls.Visualizers
 
         internal override void OnUnloaded(object sender, RoutedEventArgs e)
         {
+            rightCurrent = null;
+            leftCurrent = null;
+            leftVolumeSetNext = null;
+            rightVolumeSetNext = null;
             base.OnUnloaded(sender, e);
             this.Dispose();
         }
@@ -90,17 +97,22 @@ namespace AudioVisualization.Controls.Visualizers
             _swapChain?.Dispose();
         }
 
+        Stopwatch sw = new Stopwatch();
+
         void DrawLoop()
         {
             var canceled = _drawLoopCancellationTokenSource.Token;
 
             try
             {
+
+                //sw.Start();
                 while (!canceled.IsCancellationRequested)
                 {
                     DrawSwapChain(_swapChain);
                     _swapChain.WaitForVerticalBlank();
                 }
+                //sw.Stop();
 
                 _swapChain.Dispose();
             }
@@ -109,6 +121,11 @@ namespace AudioVisualization.Controls.Visualizers
                 _swapChain.Device.RaiseDeviceLost();
             }
         }
+
+        Queue<Double[]> LeftVolumeQueue = new Queue<double[]>();
+        Queue<Double[]> RightVolumeQueue = new Queue<double[]>();
+        double[] leftCurrent;
+        double[] rightCurrent;
 
         void DrawSwapChain(CanvasSwapChain swapChain)
         {
@@ -119,24 +136,208 @@ namespace AudioVisualization.Controls.Visualizers
 
                 var center = size / 2;
 
-                float fillRadius = radius;
-
                 // yuck
-                lock(PassthroughEffect.GetBadLock())
+                lock (PassthroughEffect.GetBadLock())
                 {
                     if (PlayerService.Current.ReferencePropertySet != null &&
-                        PlayerService.Current.ReferencePropertySet.ContainsKey("InputDataRaw"))
+                        PlayerService.Current.ReferencePropertySet.ContainsKey("VolumeLeft"))
                     {
-                        fillRadius *= (float)PlayerService.Current.ReferencePropertySet["InputDataRaw"];
+                        leftVolumeSetNext = (double[])PlayerService.Current.ReferencePropertySet["VolumeLeft"];
+                        PlayerService.Current.ReferencePropertySet.Remove("VolumeLeft");
+
+                        rightVolumeSetNext = (double[])PlayerService.Current.ReferencePropertySet["VolumeRight"];
+                        PlayerService.Current.ReferencePropertySet.Remove("VolumeRight");
                     }
+
+                    //if (PlayerService.Current.ReferencePropertySet != null &&
+                    //  PlayerService.Current.ReferencePropertySet.ContainsKey("AudioVolumeLeftQueue"))
+                    //{
+                    //    var mine = (Queue<Double[]>)PlayerService.Current.ReferencePropertySet["AudioVolumeLeftQueue"];
+                    //    int total = 0;
+                    //    while (mine.Count > 0)
+                    //    {
+                    //        total++;
+                    //        //Debug.WriteLine("Dequeueing:" + total);
+                    //        var newItem = (mine.Dequeue());
+                    //        LeftVolumeQueue.Enqueue(newItem);
+                    //    }
+
+                    //    mine = (Queue<Double[]>)PlayerService.Current.ReferencePropertySet["AudioVolumeRightQueue"];
+                    //    while (mine.Count > 0)
+                    //    {
+                    //        var newItem = (mine.Dequeue());
+                    //        RightVolumeQueue.Enqueue(newItem);
+                    //    }
+
+                    //}
                 }
 
-                ds.FillCircle(center, fillRadius, Colors.LightGoldenrodYellow);
-                ds.DrawCircle(center, radius, Colors.LightGray);
+                //if (leftCurrent==null && LeftVolumeQueue.Count>0)
+                //{
+                //    leftCurrent = LeftVolumeQueue.Dequeue();
+                //    drawIndex = 0;
+                //}
+
+                //if (rightCurrent == null && RightVolumeQueue.Count > 0)
+                //{
+                //    rightCurrent = RightVolumeQueue.Dequeue(); //Assume left and right queue have same in them which may be a bug
+                //}
+
+                if (leftCurrent == null && leftVolumeSetNext != null)
+                {
+                    leftCurrent = leftVolumeSetNext;
+                    rightCurrent = rightVolumeSetNext;
+                    leftVolumeSetNext = null;
+                    rightVolumeSetNext = null;
+                }
+
+                if (leftCurrent != null && drawIndex >= 0 && drawIndex < leftCurrent.Length)
+                {
+                    DrawVU(ds, leftCurrent[drawIndex], rightCurrent[drawIndex]);
+                    drawIndex++;
+
+                    if (leftCurrent == null || drawIndex == leftCurrent.Length - 1)
+                    {
+                        leftCurrent = null;
+                        rightCurrent = null;
+                        drawIndex = 0;
+                    }
+                }
+                else
+                {
+                    DrawVU(ds, -100, -100);
+                }
+
+                if (leftCurrent == null && leftVolumeSetNext != null)
+                {
+                    leftCurrent = leftVolumeSetNext;
+                    rightCurrent = rightVolumeSetNext;
+                }
+
+                //ds.DrawCircle(center, radius, Colors.LightGray);
             }
 
             swapChain.Present();
         }
 
+        double[] leftVolumeSetCurrent;
+        double[] rightVolumeSetCurrent;
+        double[] leftVolumeSetNext;
+        double[] rightVolumeSetNext;
+        int drawIndex = 0;
+
+        void DrawVU(CanvasDrawingSession ds, double volumeLeft, double volumeRight)
+        {
+            //TODO: move consts out of here
+
+            Color GreenLit = Color.FromArgb(255, 0, 255, 0);
+            Color GreenDim = Color.FromArgb(255, 0, 153, 0);
+            Color YellowLit = Color.FromArgb(255, 255, 255, 0);
+            Color YellowDim = Color.FromArgb(255, 153, 153, 0);
+            Color RedLit = Color.FromArgb(255, 255, 0, 0);
+            Color RedDim = Color.FromArgb(255, 153, 0, 0);
+
+            const float gap = 3.0f;
+            const float channelGap = 10.0f;
+            const float segmentHeight = 15.0f;
+            const float segmentWidth = 50.0f;
+
+            int[] vuValues = { -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0 };
+            Size segmentSize = new Size(segmentWidth, segmentHeight);
+            Point positionLeft = new Point(channelGap * 4, channelGap * 2);
+            Point positionRight = new Point(positionLeft.X + segmentWidth + channelGap, positionLeft.Y);
+            Rect segmentLeft = new Rect(positionLeft, segmentSize);
+            Rect segmentRight = new Rect(positionRight, segmentSize);
+
+            int leftActiveIndex = -1;
+            int rightActiveIndex = -1;
+
+            bool found = false;
+            for (int i = vuValues.Length - 2; i > 1; i--)
+            {
+                if (volumeLeft > vuValues[i - 1] && volumeLeft < vuValues[i + 1])
+                {
+                    leftActiveIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                Debug.WriteLine("Not found");
+            }
+
+            for (int i = vuValues.Length - 2; i > 1; i--)
+            {
+                if (volumeRight > vuValues[i - 1] && volumeRight < vuValues[i + 1])
+                {
+                    rightActiveIndex = i;
+                    break;
+                }
+            }
+
+            Color litColor;
+            Color unLitColor;
+
+            CanvasTextFormat formatleft = new CanvasTextFormat();
+            formatleft.FontSize = 9;
+            formatleft.HorizontalAlignment = CanvasHorizontalAlignment.Right;
+
+            CanvasTextFormat formatright = new CanvasTextFormat();
+            formatright.FontSize = 9;
+            formatright.HorizontalAlignment = CanvasHorizontalAlignment.Left;
+
+            for (int i = vuValues.Length - 1; i >= 0; i--)
+            {
+                CanvasTextLayout text = new CanvasTextLayout(CanvasDevice.GetSharedDevice(), vuValues[i] + " dB", formatleft, 30, 50);
+                ds.DrawTextLayout(text, new Vector2((float)positionLeft.X - 34.0f, (float)positionLeft.Y), Color.FromArgb(255, 0, 0, 0));
+
+                CanvasTextLayout text2 = new CanvasTextLayout(CanvasDevice.GetSharedDevice(), vuValues[i] + " dB", formatright, 30, 50);
+                ds.DrawTextLayout(text2, new Vector2((float)positionRight.X + (float)segmentSize.Width + 4.0f, (float)positionLeft.Y), Color.FromArgb(255, 0, 0, 0));
+                if (i >= vuValues.Length - 3)
+                {
+                    litColor = RedLit;
+                    unLitColor = RedDim;
+                }
+                else if (i >= vuValues.Length - 6 && i < vuValues.Length - 3)
+                {
+                    litColor = YellowLit;
+                    unLitColor = YellowDim;
+                }
+                else
+                {
+                    litColor = GreenLit;
+                    unLitColor = GreenDim;
+                }
+
+                segmentLeft = new Rect(positionLeft, segmentSize);
+
+                if (i <= leftActiveIndex)
+                {
+                    ds.FillRectangle(segmentLeft, litColor);
+                }
+                else
+                {
+                    ds.FillRectangle(segmentLeft, unLitColor);
+                }
+                positionLeft = new Point(positionLeft.X, positionLeft.Y + gap + segmentSize.Height);
+
+                segmentRight = new Rect(positionRight, segmentSize);
+
+                if (i <= rightActiveIndex)
+                {
+                    ds.FillRectangle(segmentRight, litColor);
+                }
+                else
+                {
+                    ds.FillRectangle(segmentRight, unLitColor);
+                }
+
+                positionRight = new Point(positionRight.X, positionRight.Y + gap + segmentSize.Height);
+            }
+
+
+        }
     }
 }

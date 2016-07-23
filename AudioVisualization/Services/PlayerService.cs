@@ -106,6 +106,21 @@ namespace AudioVisualization.Services
                 //player.AddAudioEffect(typeof(VolumeDetectionEffect).FullName, true, _sampleGrabberProperties);
 
                 player.AddAudioEffect(typeof(PassthroughEffect).FullName, false, _referenceProperties);
+
+
+                if (player.CurrentState == MediaPlayerState.Playing)
+                {
+                    var oldIndex = Playlist.PlaybackList.CurrentItemIndex;
+                    var oldPosition = _mediaPlayer.Position;
+
+                    _mediaPlayer.Source = null;
+                    _mediaPlayer.Source = Playlist.PlaybackList;
+
+
+                    _mediaPlayer.Play();
+                    _mediaPlayer.Position = oldPosition;
+                }
+
             }
         }
     }
