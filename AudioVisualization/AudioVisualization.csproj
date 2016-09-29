@@ -149,6 +149,9 @@
     </AppxManifest>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Assets\LevelTest_mixdown.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Assets\Tiles\BadgeLogo.Scale-100.png" />
     <Content Include="Assets\Tiles\BadgeLogo.Scale-125.png" />
     <Content Include="Assets\Tiles\BadgeLogo.Scale-150.png" />
