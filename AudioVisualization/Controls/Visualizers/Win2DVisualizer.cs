@@ -47,8 +47,6 @@ namespace AudioVisualization.Controls.Visualizers
         {
             rightCurrent = null;
             leftCurrent = null;
-            leftVolumeSetNext = null;
-            rightVolumeSetNext = null;
             base.OnUnloaded(sender, e);
             this.Dispose();
         }
@@ -137,94 +135,71 @@ namespace AudioVisualization.Controls.Visualizers
                 var center = size / 2;
 
                 // yuck
-                lock (PassthroughEffect.GetBadLock())
+                //lock (PassthroughEffect.GetBadLock())
                 {
                     if (PlayerService.Current.ReferencePropertySet != null &&
-                        PlayerService.Current.ReferencePropertySet.ContainsKey("VolumeLeft"))
+                        PlayerService.Current.ReferencePropertySet.ContainsKey("dataQueue") &&
+                        this.dataQueue == null)
                     {
-                        leftVolumeSetNext = (double[])PlayerService.Current.ReferencePropertySet["VolumeLeft"];
-                        PlayerService.Current.ReferencePropertySet.Remove("VolumeLeft");
-
-                        rightVolumeSetNext = (double[])PlayerService.Current.ReferencePropertySet["VolumeRight"];
-                        PlayerService.Current.ReferencePropertySet.Remove("VolumeRight");
+                        this.dataQueue = PlayerService.Current.ReferencePropertySet["dataQueue"] as Queue<Tuple<double, double>>;
                     }
 
-                    //if (PlayerService.Current.ReferencePropertySet != null &&
-                    //  PlayerService.Current.ReferencePropertySet.ContainsKey("AudioVolumeLeftQueue"))
-                    //{
-                    //    var mine = (Queue<Double[]>)PlayerService.Current.ReferencePropertySet["AudioVolumeLeftQueue"];
-                    //    int total = 0;
-                    //    while (mine.Count > 0)
-                    //    {
-                    //        total++;
-                    //        //Debug.WriteLine("Dequeueing:" + total);
-                    //        var newItem = (mine.Dequeue());
-                    //        LeftVolumeQueue.Enqueue(newItem);
-                    //    }
-
-                    //    mine = (Queue<Double[]>)PlayerService.Current.ReferencePropertySet["AudioVolumeRightQueue"];
-                    //    while (mine.Count > 0)
-                    //    {
-                    //        var newItem = (mine.Dequeue());
-                    //        RightVolumeQueue.Enqueue(newItem);
-                    //    }
-
-                    //}
-                }
-
-                //if (leftCurrent==null && LeftVolumeQueue.Count>0)
-                //{
-                //    leftCurrent = LeftVolumeQueue.Dequeue();
-                //    drawIndex = 0;
-                //}
-
-                //if (rightCurrent == null && RightVolumeQueue.Count > 0)
-                //{
-                //    rightCurrent = RightVolumeQueue.Dequeue(); //Assume left and right queue have same in them which may be a bug
-                //}
-
-                if (leftCurrent == null && leftVolumeSetNext != null)
-                {
-                    leftCurrent = leftVolumeSetNext;
-                    rightCurrent = rightVolumeSetNext;
-                    leftVolumeSetNext = null;
-                    rightVolumeSetNext = null;
-                }
-
-                if (leftCurrent != null && drawIndex >= 0 && drawIndex < leftCurrent.Length)
-                {
-                    DrawVU(ds, leftCurrent[drawIndex], rightCurrent[drawIndex]);
-                    drawIndex++;
-
-                    if (leftCurrent == null || drawIndex == leftCurrent.Length - 1)
+                    if (this.dataQueue != null && !hasNextValue && this.dataQueue.Count>0)
                     {
-                        leftCurrent = null;
-                        rightCurrent = null;
-                        drawIndex = 0;
+                        nextvalue = this.dataQueue.Dequeue();
+                        hasNextValue = true;
+                    } else if (this.dataQueue != null && this.dataQueue.Count == 0)
+                    {
+                        hasNextValue = false;
+
                     }
+                }
+
+                if (dataQueue != null)
+                {
+                    Debug.WriteLine(dataQueue.Count);
+                }
+
+                if (!weAreVisualizing && hasNextValue)
+                {
+                    weAreVisualizing = true;
+                    delayStart = true;
+                }
+
+                if (weAreVisualizing && delayStart && delayCurrent < delayTotal)
+                {
+                    delayCurrent++;
                 }
                 else
                 {
+                    delayStart = false;
+                    delayCurrent = 0;
+                }
+
+                if (weAreVisualizing && delayStart)
+                {
+                    DrawVU(ds, -100, -100);
+                } else if (weAreVisualizing && !delayStart && nextvalue != null)
+                {
+                    DrawVU(ds, nextvalue.Item1, nextvalue.Item2);
+                    hasNextValue = false;
+                } else
+                {
+                    Debug.WriteLine("miss");
                     DrawVU(ds, -100, -100);
                 }
-
-                if (leftCurrent == null && leftVolumeSetNext != null)
-                {
-                    leftCurrent = leftVolumeSetNext;
-                    rightCurrent = rightVolumeSetNext;
-                }
-
-                //ds.DrawCircle(center, radius, Colors.LightGray);
             }
 
             swapChain.Present();
         }
 
-        double[] leftVolumeSetCurrent;
-        double[] rightVolumeSetCurrent;
-        double[] leftVolumeSetNext;
-        double[] rightVolumeSetNext;
-        int drawIndex = 0;
+        private bool hasNextValue;
+        private Tuple<double, double> nextvalue;
+        private Queue<Tuple<double, double>> dataQueue;
+        private long delayTotal = 5;
+        private long delayCurrent = 0;
+        private bool delayStart = false;
+        private bool weAreVisualizing = false;
 
         void DrawVU(CanvasDrawingSession ds, double volumeLeft, double volumeRight)
         {

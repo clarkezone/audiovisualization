@@ -38,22 +38,22 @@ namespace AudioVisualization.Controls.Visualizers
 
         private void SetupVisualizer()
         {
-            _barVisual = _compositor.CreateSpriteVisual();
-            _barVisual.Size = new Vector2(50, 0);
-            _barVisual.AnchorPoint = new Vector2(0.5f, 1);
-            _barVisual.Brush = _compositor.CreateColorBrush(Colors.Red);
+            //_barVisual = _compositor.CreateSpriteVisual();
+            //_barVisual.Size = new Vector2(50, 0);
+            //_barVisual.AnchorPoint = new Vector2(0.5f, 1);
+            //_barVisual.Brush = _compositor.CreateColorBrush(Colors.Red);
 
-            var sizeExpression = _compositor.CreateExpressionAnimation();
-            sizeExpression.Expression = "propertySet.InputData";
-            sizeExpression.SetReferenceParameter("propertySet", PlayerService.Current.CompositionPropertySet);
-            _barVisual.StartAnimation(nameof(Visual.Size) + ".Y", sizeExpression);
+            //var sizeExpression = _compositor.CreateExpressionAnimation();
+            //sizeExpression.Expression = "propertySet.InputData";
+            //sizeExpression.SetReferenceParameter("propertySet", PlayerService.Current.CompositionPropertySet);
+            //_barVisual.StartAnimation(nameof(Visual.Size) + ".Y", sizeExpression);
 
-            var offsetExpression = _compositor.CreateExpressionAnimation();
-            offsetExpression.Expression = "Vector3(visual.Size.X / 2, visual.Size.Y, 0)";
-            offsetExpression.SetReferenceParameter("visual", _backgroundVisual);
-            _barVisual.StartAnimation(nameof(Visual.Offset), offsetExpression);
+            //var offsetExpression = _compositor.CreateExpressionAnimation();
+            //offsetExpression.Expression = "Vector3(visual.Size.X / 2, visual.Size.Y, 0)";
+            //offsetExpression.SetReferenceParameter("visual", _backgroundVisual);
+            //_barVisual.StartAnimation(nameof(Visual.Offset), offsetExpression);
 
-            _backgroundVisual.Children.InsertAtTop(_barVisual);
+            //_backgroundVisual.Children.InsertAtTop(_barVisual);
         }
     }
 }

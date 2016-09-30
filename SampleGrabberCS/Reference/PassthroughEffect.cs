@@ -26,7 +26,6 @@ namespace SampleGrabberCS.Reference
         private List<AudioEncodingProperties> supportedEncodingProperties;
 
         private IPropertySet propertySet;
-        private CompositionPropertySet compositionPropertySet;
 
         public bool UseInputFrameForOutput { get { return true; } }
         public bool TimeIndependent { get { return false; } }
@@ -110,10 +109,13 @@ namespace SampleGrabberCS.Reference
 
                 lock (PassthroughEffect.GetBadLock())
                 {
+                    for (var i = 0; i < numVBlanksForCurrentAudioBuffer; i++) {
+                        ((Queue<Tuple<double, double>>)this.propertySet["dataQueue"]).Enqueue(new Tuple<double, double>(volumeSetLeft[i], volumeSetRight[i]));
+                    }
                     //((Queue<Double[]>)this.propertySet["AudioVolumeLeftQueue"]).Enqueue(volumeSetLeft);
                     //((Queue<Double[]>)this.propertySet["AudioVolumeRightQueue"]).Enqueue(volumeSetRight);
-                    this.propertySet["VolumeLeft"] = volumeSetLeft;
-                    this.propertySet["VolumeRight"] = volumeSetRight;
+                    //this.propertySet["VolumeLeft"] = volumeSetLeft;
+                    //this.propertySet["VolumeRight"] = volumeSetRight;
                 }
             }
         }
@@ -168,10 +170,10 @@ namespace SampleGrabberCS.Reference
         {
             this.propertySet = configuration;
 
-            if (propertySet.ContainsKey("compositionPropertySet"))
-            {
-                compositionPropertySet = (CompositionPropertySet)propertySet["compositionPropertySet"];
-            }
+            //if (propertySet.ContainsKey("compositionPropertySet"))
+            //{
+            //    compositionPropertySet = (CompositionPropertySet)propertySet["compositionPropertySet"];
+            //}
 
             //propertySet.Add("AudioVolumeLeftQueue", new Queue<Double[]>());
             //propertySet.Add("AudioVolumeRightQueue", new Queue<Double[]>());

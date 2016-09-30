@@ -25,7 +25,6 @@ namespace AudioVisualization.Services
 
         private PropertySet _referenceProperties;
 
-        private CompositionPropertySet _compositionPropertySet;
 
         public static PlayerService Current { get { if (_current == null) { _current = new PlayerService(); } return _current; } }
 
@@ -33,16 +32,11 @@ namespace AudioVisualization.Services
 
         public Playlist Playlist { get; }
 
-        public CompositionPropertySet CompositionPropertySet { get { return _compositionPropertySet; } }
-
         public PropertySet ReferencePropertySet { get { return _referenceProperties; } }
 
         private PlayerService()
         {
             Playlist = new Playlist();
-
-            _compositionPropertySet = CompositionManager.Compositor.CreatePropertySet();
-            _compositionPropertySet.InsertScalar("InputData", 0);
 
             InitializeMediaPlayer();
         }
@@ -78,6 +72,7 @@ namespace AudioVisualization.Services
         public void Play()
         {
             _mediaPlayer.Play();
+
         }
 
         public void Pause()
@@ -95,11 +90,9 @@ namespace AudioVisualization.Services
         {
             if (_sampleGrabberProperties == null)
             {
-                _sampleGrabberProperties = new PropertySet();
-
                 _referenceProperties = new PropertySet();
 
-                _referenceProperties.Add("compositionPropertySet", _compositionPropertySet);
+                _referenceProperties.Add("dataQueue", new Queue<Tuple<double,double>>());
 
                 //player.AddAudioEffect("SG.SampleGrabberTransform", false, null);
 
