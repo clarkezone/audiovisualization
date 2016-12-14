@@ -1,0 +1,3 @@
+﻿1) dump raw samples into a file with a modified passthrougheffect
+2) write a harness that can run on the UI thread and hook directly to Win2d.. debug RMS algo with that
+3) Debug the producer consumer algo

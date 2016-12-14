@@ -197,6 +197,7 @@
     <Content Include="Assets\Tiles\Wide310x150.Scale-200.png" />
     <Content Include="Assets\Tiles\Wide310x150.Scale-400.png" />
     <Content Include="Properties\Default.rd.xml" />
+    <Content Include="todolist.txt" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
