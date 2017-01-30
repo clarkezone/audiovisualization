@@ -94,11 +94,11 @@ namespace AudioVisualization.Services
 
                 _referenceProperties.Add("dataQueue", new Queue<Tuple<double,double>>());
 
-                //player.AddAudioEffect("SG.SampleGrabberTransform", false, null);
+                player.AddAudioEffect("SG.SampleGrabberTransform", false, null);
 
                 //player.AddAudioEffect(typeof(VolumeDetectionEffect).FullName, true, _sampleGrabberProperties);
 
-                player.AddAudioEffect(typeof(PassthroughEffect).FullName, false, _referenceProperties);
+                //player.AddAudioEffect(typeof(PassthroughEffect).FullName, false, _referenceProperties);
 
 
                 if (player.CurrentState == MediaPlayerState.Playing)
