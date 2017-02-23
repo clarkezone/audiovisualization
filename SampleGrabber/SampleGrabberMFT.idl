@@ -1,12 +1,37 @@
 import "Windows.Media.idl";
+import "inspectable.idl";
+import "AsyncInfo.idl";
+import "EventToken.idl";
+import "Windows.Foundation.idl";
 
 #include <sdkddkver.h>
 
 namespace SG
 {
+	typedef struct Data Data;
+
+	[version(NTDDI_WIN8)]
+	struct Data {
+		float VariableOne;
+	};
+
+	declare
+	{
+		interface Windows.Foundation.Collections.IVectorView<SG.Data>;
+	}
+
+	[uuid(999d2f3c-f9da-4abd-9103-9d268e41d5b1)]
+	[version(NTDDI_WIN8)]
+	interface IMyInterface : IInspectable {
+		HRESULT GetVector([out][retval] Windows.Foundation.Collections.IVectorView<SG.Data>** result);
+	};
+
 	[version(NTDDI_WIN8)]
 	runtimeclass SampleGrabberTransform
 	{
-		interface Windows.Media.IMediaExtension;
-}
+		[default]interface Windows.Media.IMediaExtension;
+		interface IMyInterface;
+	}
+
+//public 
 }

@@ -21,7 +21,7 @@
 class CSampleGrabber
 	: public Microsoft::WRL::RuntimeClass<
 	Microsoft::WRL::RuntimeClassFlags< Microsoft::WRL::RuntimeClassType::WinRtClassicComMix >,
-	ABI::Windows::Media::IMediaExtension,
+	ABI::Windows::Media::IMediaExtension, ABI::SG::IMyInterface,
 	IMFTransform >
 {
 	InspectableClass(RuntimeClass_SG_SampleGrabberTransform, BaseTrust)
@@ -35,6 +35,8 @@ public:
 
 	// IMediaExtension
 	STDMETHODIMP SetProperties(ABI::Windows::Foundation::Collections::IPropertySet *pConfiguration);
+
+	STDMETHODIMP GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SG::Data> **pConfiguration);
 
 	// IMFTransform
 	STDMETHODIMP GetStreamLimits(

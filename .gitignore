@@ -237,3 +237,8 @@ _Pvt_Extensions
 /SampleGrabber/SampleGrabberMFT.h
 /SampleGrabber/SampleGrabberMFT_h.h
 /AudioVisualization.VC.db
+/AudioProcessingTests/Generated Files/XamlTypeInfo.Impl.g.cpp
+/AudioProcessingTests/Generated Files/XamlTypeInfo.g.h
+/AudioProcessingTests/Generated Files/XamlLibMetadataProvider.g.cpp
+/AudioProcessingTests/Generated Files/XamlBindingInfo.g.h
+/AudioProcessingTests/Generated Files/UnitTestApp.g.h
