@@ -26,6 +26,27 @@ STDMETHODIMP CSampleGrabber::RuntimeClassInitialize()
 //-------------------------------------------------------------------
 HRESULT CSampleGrabber::SetProperties(ABI::Windows::Foundation::Collections::IPropertySet *pConfiguration)
 {
+	// com rule is esential comm (don box)
+	// for a synchronous mehtod the caller ensures that the property set is alive for the duration of the call
+	// rule 2 when a funtion returns an interface pointer it is already addref
+	// having QI'd i now own the reference, i must call release on it
+	// only add a reference if keeping alive after function.
+	// putting it in WRL will incur cost of add ref
+	// if it was an async method you would do that immediately
+	// how to wrap raw pointer?
+	//pConfiguration->
+
+	return S_OK;
+}
+
+HRESULT CSampleGrabber::GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SG::Data> **pConfiguration) {
+	return E_FAIL;
+}
+
+HRESULT CSampleGrabber::GetSingleData(ABI::SG::Data *pData) {
+	ABI::SG::Data data;
+	data.VariableOne = 256.999;
+	pData = &data;
 	return S_OK;
 }
 

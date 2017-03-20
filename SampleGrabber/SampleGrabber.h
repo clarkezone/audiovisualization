@@ -38,6 +38,8 @@ public:
 
 	STDMETHODIMP GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SG::Data> **pConfiguration);
 
+	STDMETHODIMP GetSingleData(ABI::SG::Data* result);
+
 	// IMFTransform
 	STDMETHODIMP GetStreamLimits(
 		DWORD   *pdwInputMinimum,

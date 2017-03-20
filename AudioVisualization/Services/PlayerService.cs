@@ -92,10 +92,19 @@ namespace AudioVisualization.Services
             {
                 _referenceProperties = new PropertySet();
 
-                _referenceProperties.Add("dataQueue", new Queue<Tuple<double,double>>());
+                //_referenceProperties.Add("dataQueue", new Queue<Tuple<double,double>>());
 
-                player.AddAudioEffect("SG.SampleGrabberTransform", false, null);
+                player.AddAudioEffect("SG.SampleGrabberTransform", false, _referenceProperties);
 
+                SG.IMyInterface call;
+
+                //var call = ((IMyInterface)_referenceProperties["filterApi"]);
+
+                //var customStruct = call.GetValue();
+
+
+
+                ///OLDER
                 //player.AddAudioEffect(typeof(VolumeDetectionEffect).FullName, true, _sampleGrabberProperties);
 
                 //player.AddAudioEffect(typeof(PassthroughEffect).FullName, false, _referenceProperties);

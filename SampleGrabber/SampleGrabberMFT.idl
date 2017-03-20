@@ -24,6 +24,7 @@ namespace SG
 	[version(NTDDI_WIN8)]
 	interface IMyInterface : IInspectable {
 		HRESULT GetVector([out][retval] Windows.Foundation.Collections.IVectorView<SG.Data>** result);
+		HRESULT GetSingleData([out][retval] SG.Data* result);
 	};
 
 	[version(NTDDI_WIN8)]
