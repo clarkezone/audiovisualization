@@ -39,12 +39,12 @@ HRESULT CSampleGrabber::SetProperties(ABI::Windows::Foundation::Collections::IPr
 	return S_OK;
 }
 
-HRESULT CSampleGrabber::GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SG::Data> **pConfiguration) {
+HRESULT CSampleGrabber::GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SampleGrabber::Data> **pConfiguration) {
 	return E_FAIL;
 }
 
-HRESULT CSampleGrabber::GetSingleData(ABI::SG::Data *pData) {
-	ABI::SG::Data data;
+HRESULT CSampleGrabber::GetSingleData(ABI::SampleGrabber::Data *pData) {
+	ABI::SampleGrabber::Data data;
 	data.VariableOne = 256.999;
 	pData = &data;
 	return S_OK;

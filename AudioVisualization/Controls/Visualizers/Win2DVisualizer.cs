@@ -9,7 +9,6 @@ using Windows.UI.Core;
 using System.Threading;
 using Windows.Foundation;
 using Windows.UI;
-using SampleGrabberCS.Reference;
 using AudioVisualization.Services;
 using System.Diagnostics;
 using System.Collections.Generic;

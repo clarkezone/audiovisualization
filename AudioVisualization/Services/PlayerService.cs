@@ -1,19 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using AudioVisualization.Playback;
+﻿using AudioVisualization.Playback;
 using Windows.Media.Playback;
 using Windows.Foundation.Collections;
-using AudioVisualization.AutoProcessing;
 using System.Diagnostics;
-using Windows.Media;
 using AudioVisualization.Controls.Visualizers;
-using SampleGrabberCS;
-using SampleGrabberCS.Reference;
-using Windows.UI.Composition;
-using AudioVisualization.Composition;
 
 namespace AudioVisualization.Services
 {
@@ -94,9 +83,9 @@ namespace AudioVisualization.Services
 
                 //_referenceProperties.Add("dataQueue", new Queue<Tuple<double,double>>());
 
-                player.AddAudioEffect("SG.SampleGrabberTransform", false, _referenceProperties);
+                player.AddAudioEffect("SampleGrabber.SampleGrabberTransform", false, _referenceProperties);
 
-                SG.IMyInterface call;
+                SampleGrabber.IMyInterface call;
 
                 //var call = ((IMyInterface)_referenceProperties["filterApi"]);
 

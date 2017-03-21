@@ -1,7 +1,6 @@
 ﻿#pragma once
-
-#include <collection.h>
 #include <ppltasks.h>
+#include <wrl/client.h>
 #ifndef TRACE
 #ifdef _DEBUG
 #include <stdio.h>

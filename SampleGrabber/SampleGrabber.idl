@@ -6,7 +6,7 @@ import "Windows.Foundation.idl";
 
 #include <sdkddkver.h>
 
-namespace SG
+namespace SampleGrabber
 {
 	typedef struct Data Data;
 
@@ -17,14 +17,14 @@ namespace SG
 
 	declare
 	{
-		interface Windows.Foundation.Collections.IVectorView<SG.Data>;
+		interface Windows.Foundation.Collections.IVectorView<SampleGrabber.Data>;
 	}
 
 	[uuid(999d2f3c-f9da-4abd-9103-9d268e41d5b1)]
 	[version(NTDDI_WIN8)]
 	interface IMyInterface : IInspectable {
-		HRESULT GetVector([out][retval] Windows.Foundation.Collections.IVectorView<SG.Data>** result);
-		HRESULT GetSingleData([out][retval] SG.Data* result);
+		HRESULT GetVector([out][retval] Windows.Foundation.Collections.IVectorView<SampleGrabber.Data>** result);
+		HRESULT GetSingleData([out][retval] SampleGrabber.Data* result);
 	};
 
 	[version(NTDDI_WIN8)]

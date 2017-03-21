@@ -1,10 +1,4 @@
-﻿using AudioVisualization.AutoProcessing;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Windows.Foundation.Collections;
+﻿using Windows.Foundation.Collections;
 using Windows.Media.Playback;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;

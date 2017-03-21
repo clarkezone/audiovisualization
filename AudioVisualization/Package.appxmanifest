@@ -32,7 +32,7 @@
     <Extension Category="windows.activatableClass.inProcessServer">
       <InProcessServer>
         <Path>SampleGrabber.dll</Path>
-        <ActivatableClass ActivatableClassId="SG.SampleGrabberTransform" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="SampleGrabber.SampleGrabberTransform" ThreadingModel="both" />
       </InProcessServer>
     </Extension>
     <!--<Extension Category="windows.activatableClass.inProcessServer">

@@ -20,6 +20,6 @@
     <ClInclude Include="MFHelpers.h" />
   </ItemGroup>
   <ItemGroup>
-    <Midl Include="SampleGrabberMFT.idl" />
+    <Midl Include="SampleGrabber.idl" />
   </ItemGroup>
 </Project>

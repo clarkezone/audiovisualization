@@ -1,5 +1,5 @@
 #pragma once
-#include "SampleGrabberMFT.h"
+#include "SampleGrabber_h.h"
 
 #include <mfapi.h>
 #include <mftransform.h>
@@ -21,10 +21,10 @@
 class CSampleGrabber
 	: public Microsoft::WRL::RuntimeClass<
 	Microsoft::WRL::RuntimeClassFlags< Microsoft::WRL::RuntimeClassType::WinRtClassicComMix >,
-	ABI::Windows::Media::IMediaExtension, ABI::SG::IMyInterface,
+	ABI::Windows::Media::IMediaExtension, ABI::SampleGrabber::IMyInterface,
 	IMFTransform >
 {
-	InspectableClass(RuntimeClass_SG_SampleGrabberTransform, BaseTrust)
+	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)
 
 public:
 	CSampleGrabber();
@@ -36,9 +36,9 @@ public:
 	// IMediaExtension
 	STDMETHODIMP SetProperties(ABI::Windows::Foundation::Collections::IPropertySet *pConfiguration);
 
-	STDMETHODIMP GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SG::Data> **pConfiguration);
+	STDMETHODIMP GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SampleGrabber::Data> **pConfiguration);
 
-	STDMETHODIMP GetSingleData(ABI::SG::Data* result);
+	STDMETHODIMP GetSingleData(ABI::SampleGrabber::Data* result);
 
 	// IMFTransform
 	STDMETHODIMP GetStreamLimits(
