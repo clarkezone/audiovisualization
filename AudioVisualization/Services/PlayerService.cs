@@ -88,23 +88,16 @@ namespace AudioVisualization.Services
             {
                 _referenceProperties = new PropertySet();
 
-                //_referenceProperties.Add("dataQueue", new Queue<Tuple<double,double>>());
-
                 player.AddAudioEffect("SampleGrabber.SampleGrabberTransform", false, _referenceProperties);
 
-                SampleGrabber.IMyInterface call;
+                if (_referenceProperties.ContainsKey("samplegrabber"))
+                {
+                    SampleGrabber.IMyInterface call = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
 
-                //var call = ((IMyInterface)_referenceProperties["filterApi"]);
+                    var customStruct = call?.GetSingleData();
 
-                //var customStruct = call.GetValue();
-
-
-
-                ///OLDER
-                //player.AddAudioEffect(typeof(VolumeDetectionEffect).FullName, true, _sampleGrabberProperties);
-
-                //player.AddAudioEffect(typeof(PassthroughEffect).FullName, false, _referenceProperties);
-
+                    //TODO get a ringbuffer interface
+                }
 
                 if (player.CurrentState == MediaPlayerState.Playing)
                 {

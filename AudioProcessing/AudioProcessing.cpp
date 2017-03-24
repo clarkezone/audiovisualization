@@ -42,8 +42,10 @@ HRESULT AudioProcessor::BuildVectorBuffer(Microsoft::WRL::ComPtr<IMFSample> pSam
 	vectorBytes = &vectorInputBuffer;
 }
 
-void AudioProcessor::CalculateVolumes(DirectX::XMVECTOR *input)
+void AudioProcessor::CalcRMSVec(DirectX::XMVECTOR *input)
 {
+	//TODO: port rms to vector math
+
 	//int inputLengthSamples = (int)input.Length / sizeof(DirectX::XMVECTOR);
 
 	//int samplesPervBlank = (int)((float)currentEncodingProperties.SampleRate / (float)videoFrameRate);

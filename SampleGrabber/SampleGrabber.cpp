@@ -33,8 +33,9 @@ HRESULT CSampleGrabber::SetProperties(ABI::Windows::Foundation::Collections::IPr
 	// only add a reference if keeping alive after function.
 	// putting it in WRL will incur cost of add ref
 	// if it was an async method you would do that immediately
-	// how to wrap raw pointer?
-	//pConfiguration->
+	
+	//TODO: add reference to this SampleGrabber instance to the propertyset
+	//pConfiguration->Add(this, "samplegrabber");
 
 	return S_OK;
 }
@@ -853,6 +854,9 @@ HRESULT CSampleGrabber::ProcessOutput(
 	}
 
 #pragma region MyRegion
+
+	//TODO: move this into the 
+
 	 //Get the input buffer.
 	Microsoft::WRL::ComPtr<IMFMediaBuffer> pInput;
 
@@ -883,6 +887,8 @@ HRESULT CSampleGrabber::ProcessOutput(
 	}
 
 	_aligned_free(vectorInputBuffer);
+
+
 
 #pragma endregion
 
