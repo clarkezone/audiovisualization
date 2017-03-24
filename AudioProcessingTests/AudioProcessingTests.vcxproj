@@ -213,6 +213,9 @@
     <ProjectReference Include="..\AudioProcessing\AudioProcessing.vcxproj">
       <Project>{5836478f-0d31-4b5a-a833-279a89d9d8c7}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\SampleGrabber\SampleGrabber.vcxproj">
+      <Project>{1249b84b-73cf-49dd-a281-29fb23c1d1cf}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Media Include="Assets\LevelTest_mixdown.mp3" />

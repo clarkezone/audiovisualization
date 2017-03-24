@@ -41,6 +41,13 @@ namespace AudioVisualization.Services
             _mediaPlayer.CurrentStateChanged += _mediaPlayer_CurrentStateChanged;
 
             _mediaPlayer.Source = Playlist.PlaybackList;
+
+            Playlist.PlaybackList.ItemFailed += PlaybackList_ItemFailed;
+        }
+
+        private void PlaybackList_ItemFailed(MediaPlaybackList sender, MediaPlaybackItemFailedEventArgs args)
+        {
+            Debug.WriteLine(args.Error.ToString());
         }
 
         private void _mediaPlayer_CurrentStateChanged(MediaPlayer sender, object args)

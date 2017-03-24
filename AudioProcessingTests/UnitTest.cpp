@@ -6,9 +6,9 @@ using namespace Microsoft::WRL;
 
 namespace AudioProcessingTests
 {
-    TEST_CLASS(UnitTest1)
-    {
-    public:
+	TEST_CLASS(UnitTest1)
+	{
+	public:
 		TEST_METHOD(VerifyPushPop)
 		{
 			std::queue<float> test;
@@ -22,8 +22,22 @@ namespace AudioProcessingTests
 			auto three = test.front();
 		}
 
-        TEST_METHOD(VerifyRMS)
-        {
+		TEST_METHOD(ActivateFilter)
+		{
+			ComPtr<IInspectable> object;
+
+			HRESULT hr = ABI::Windows::Foundation::Initialize(RO_INIT_MULTITHREADED);
+			__abi_ThrowIfFailed(hr);
+
+			auto refr = Microsoft::WRL::Wrappers::HStringReference(L"SampleGrabber.SampleGrabberTransform");
+
+			ComPtr<IInspectable> uriFactory;
+			hr = ABI::Windows::Foundation::GetActivationFactory(refr.Get(), &uriFactory);
+			__abi_ThrowIfFailed(hr);
+		}
+
+		TEST_METHOD(VerifyRMS)
+		{
 			ComPtr<IMFSample> sample;
 			ComPtr<IUnknown> object;
 
@@ -116,7 +130,7 @@ namespace AudioProcessingTests
 
 				DirectX::XMVECTOR* pBuffer;
 
-				if (SUCCEEDED(hr)) {					
+				if (SUCCEEDED(hr)) {
 					//TODO: test perf
 
 					double sampleDuration = 0;
@@ -155,6 +169,6 @@ namespace AudioProcessingTests
 
 			//TODO: 1c verify final number of RMS values per filelength
 			//TODO: 1d table based verification here for all the RMS
-        }
-    };
+		}
+	};
 }
