@@ -34,8 +34,27 @@ HRESULT CSampleGrabber::SetProperties(ABI::Windows::Foundation::Collections::IPr
 	// putting it in WRL will incur cost of add ref
 	// if it was an async method you would do that immediately
 	
-	//TODO: add reference to this SampleGrabber instance to the propertyset
-	//pConfiguration->Add(this, "samplegrabber");
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Collections::IMap<HSTRING, IInspectable *>> pMap;
+	HRESULT hr = pConfiguration->QueryInterface(IID_PPV_ARGS(&pMap));
+	if (FAILED(hr))
+		return hr;
+
+	Microsoft::WRL::Wrappers::HStringReference name(L"samplegrabber");
+
+	IInspectable* reference;
+
+	//QI will addref, we put the addreff'd one in the property set
+	hr = this->QueryInterface(IID_PPV_ARGS(&reference));
+
+	if (FAILED(hr))
+		return hr;
+
+	boolean replaced;
+
+	hr = pMap->Insert(name.Get(), reference, &replaced);
+
+	if (FAILED(hr))
+		return hr;
 
 	return S_OK;
 }
