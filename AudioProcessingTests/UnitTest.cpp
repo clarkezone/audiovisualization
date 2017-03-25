@@ -29,10 +29,10 @@ namespace AudioProcessingTests
 			HRESULT hr = ABI::Windows::Foundation::Initialize(RO_INIT_MULTITHREADED);
 			__abi_ThrowIfFailed(hr);
 
-			auto refr = Microsoft::WRL::Wrappers::HStringReference(L"SampleGrabber.SampleGrabberTransform");
-
-			ComPtr<IInspectable> uriFactory;
-			hr = ABI::Windows::Foundation::GetActivationFactory(refr.Get(), &uriFactory);
+			//auto refr = Microsoft::WRL::Wrappers::HStringReference(L"SampleGrabber.SampleGrabberTransform");
+			Microsoft::WRL::Wrappers::HStringReference runtimeClassUri(L"SampleGrabber.SampleGrabberTransform");
+			ComPtr<IActivationFactory> uriFactory;
+			hr = ABI::Windows::Foundation::GetActivationFactory(runtimeClassUri.Get(), &uriFactory);
 			__abi_ThrowIfFailed(hr);
 		}
 
