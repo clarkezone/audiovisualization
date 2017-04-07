@@ -22,7 +22,7 @@ class CSampleGrabber
 	: public Microsoft::WRL::RuntimeClass<
 	Microsoft::WRL::RuntimeClassFlags< Microsoft::WRL::RuntimeClassType::WinRtClassicComMix >,
 	ABI::Windows::Media::IMediaExtension, ABI::SampleGrabber::IMyInterface,
-	IMFTransform >
+	IMFTransform,IMFClockConsumer >
 {
 	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)
 
@@ -158,6 +158,16 @@ public:
 		DWORD                   *pdwStatus
 		);
 
+	HRESULT STDMETHODCALLTYPE SetPresentationClock(_In_opt_ IMFPresentationClock *pPresentationClock) 
+	{
+		m_spPresentationClock = pPresentationClock;
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE GetPresentationClock(_COM_Outptr_opt_result_maybenull_ IMFPresentationClock **pPresentationClock) 
+	{
+		return E_NOTIMPL;
+	}
+
 private:
 	Microsoft::WRL::ComPtr<IMFAttributes>		m_pAttributes;
 	Microsoft::WRL::ComPtr<IMFMediaType>		m_pInputType;              // Input media type.
@@ -166,6 +176,7 @@ private:
 	Microsoft::WRL::ComPtr<IMFSample>			m_pSample;
 	Microsoft::WRL::ComPtr <IMFMediaType>		m_pMediaType;
 	bool										m_bStreamingInitialized;
+	Microsoft::WRL::ComPtr<IMFPresentationClock>	m_spPresentationClock;
 	HRESULT BeginStreaming();
 	HRESULT EndStreaming();
 	HRESULT OnFlush();

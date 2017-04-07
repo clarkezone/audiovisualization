@@ -1,8 +1,10 @@
 #include "pch.h"
 #include "SampleGrabber.h"
+#include "Trace.h"
 
 CSampleGrabber::CSampleGrabber() : m_pSample(nullptr), m_pOutputType(nullptr), m_pInputType(nullptr)
 {
+	Trace::Initialize();
 	TRACE(L"construct");
 }
 
@@ -428,6 +430,8 @@ HRESULT CSampleGrabber::SetInputType(
 		return E_INVALIDARG;
 	}
 
+	Trace::Log_SetInputType(dwInputStreamID, pType);
+
 	auto lock = m_cs.Lock();
 
 	if (dwInputStreamID!=0)
@@ -489,6 +493,8 @@ HRESULT CSampleGrabber::SetOutputType(
 	{
 		return E_INVALIDARG;
 	}
+
+	Trace::Log_SetOutputType(dwOutputStreamID, pType);
 
 	auto lock = m_cs.Lock();
 
@@ -779,6 +785,13 @@ HRESULT CSampleGrabber::ProcessInput(
 	DWORD               dwFlags
 	)
 {
+	REFERENCE_TIME presentationTime = -1;
+	if (m_spPresentationClock != nullptr)
+	{
+		m_spPresentationClock->GetTime(&presentationTime);
+	}
+	CLogActivityHelper activity(Trace::Log_ProcessInput(dwInputStreamID, pSample, dwFlags, presentationTime));
+
 	// Check input parameters.
 	if (pSample == NULL)
 	{
@@ -838,6 +851,13 @@ HRESULT CSampleGrabber::ProcessOutput(
 	DWORD                   *pdwStatus
 	)
 {
+	REFERENCE_TIME presentationTime = -1;
+	if (m_spPresentationClock != nullptr)
+	{
+		m_spPresentationClock->GetTime(&presentationTime);
+	}
+	CLogActivityHelper activity(Trace::Log_ProcessOutput(dwFlags,cOutputBufferCount,presentationTime));
+
 	if (dwFlags != 0)
 	{
 		return E_INVALIDARG;
