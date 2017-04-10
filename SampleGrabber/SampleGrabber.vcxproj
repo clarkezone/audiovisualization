@@ -131,7 +131,7 @@
       <ModuleDefinitionFile>SampleGrabber.def</ModuleDefinitionFile>
     </Link>
     <Midl>
-      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <HeaderFileName>%(Filename)_h.h</HeaderFileName>
     </Midl>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
