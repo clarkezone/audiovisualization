@@ -53,6 +53,21 @@ namespace AudioVisualization.Services
         private void _mediaPlayer_CurrentStateChanged(MediaPlayer sender, object args)
         {
             Debug.WriteLine(sender.CurrentState.ToString());
+
+            // filter property set is ready after opening on the next paused
+
+            if (sender.CurrentState == MediaPlayerState.Playing)
+            {
+                if (_referenceProperties.ContainsKey("samplegrabber"))
+                {
+                    SampleGrabber.IMyInterface call = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
+
+                    var customStruct = call?.GetSingleData();
+
+                    Debug.WriteLine(customStruct.Value);
+                    //TODO get a ringbuffer interface
+                }
+            }
         }
 
         private void _mediaPlayer_MediaEnded(MediaPlayer sender, object args)
@@ -68,7 +83,6 @@ namespace AudioVisualization.Services
         public void Play()
         {
             _mediaPlayer.Play();
-
         }
 
         public void Pause()
@@ -89,15 +103,6 @@ namespace AudioVisualization.Services
                 _referenceProperties = new PropertySet();
 
                 player.AddAudioEffect("SampleGrabber.SampleGrabberTransform", false, _referenceProperties);
-
-                if (_referenceProperties.ContainsKey("samplegrabber"))
-                {
-                    SampleGrabber.IMyInterface call = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
-
-                    var customStruct = call?.GetSingleData();
-
-                    //TODO get a ringbuffer interface
-                }
 
                 if (player.CurrentState == MediaPlayerState.Playing)
                 {
