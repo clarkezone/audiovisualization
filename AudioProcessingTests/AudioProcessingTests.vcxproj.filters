@@ -17,6 +17,7 @@
     <ClCompile Include="UnitTest.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="MFHelpers.cpp" />
+    <ClCompile Include="AnalyzerTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

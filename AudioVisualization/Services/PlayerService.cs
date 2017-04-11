@@ -92,9 +92,9 @@ namespace AudioVisualization.Services
 
                 if (_referenceProperties.ContainsKey("samplegrabber"))
                 {
-                    SampleGrabber.IMyInterface call = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
+                    //SampleGrabber.IMyInterface call = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
 
-                    var customStruct = call?.GetSingleData();
+                    //var customStruct = call?.GetSingleData();
 
                     //TODO get a ringbuffer interface
                 }

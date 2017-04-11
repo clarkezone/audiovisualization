@@ -11,6 +11,7 @@
     <ClCompile Include="SampleGrabber.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="MFHelpers.cpp" />
+    <ClCompile Include="Trace.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -18,8 +19,13 @@
     <ClInclude Include="XDSP.h" />
     <ClInclude Include="DirectXMath.h" />
     <ClInclude Include="MFHelpers.h" />
+    <ClInclude Include="Trace.h" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="SampleGrabber.idl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="SampleGrabber.def" />
+    <None Include="AudioVizualisation.wprp" />
   </ItemGroup>
 </Project>
