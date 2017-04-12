@@ -1,30 +1,39 @@
 #pragma once
 #include <mfapi.h>
+#include <wrl.h>
+#include <windows.foundation.diagnostics.h>
 
 // Helper class to log stop event automatically when object goes out of scope
 class CLogActivityHelper
 {
-	Windows::Foundation::Diagnostics::LoggingActivity ^m_Activity;
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> m_spActivity;
 public:
-	CLogActivityHelper(Windows::Foundation::Diagnostics::LoggingActivity ^activity)
+	CLogActivityHelper(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity)
 	{
-		m_Activity = activity;
+		m_spActivity = pActivity;
 	}
 	// If destructed when going out of scope log stop event with same name
 	~CLogActivityHelper()
 	{
-		m_Activity->StopActivity(m_Activity->Name);
+		using namespace ABI::Windows::Foundation::Diagnostics;
+		using namespace Microsoft::WRL;
+		ComPtr<ILoggingActivity2> m_spActivity2;
+		m_spActivity.As(&m_spActivity2);
+		HSTRING hEventName = nullptr;
+		m_spActivity->get_Name(&hEventName);
+		m_spActivity2->StopActivity(hEventName);
 	}
 };
 
 class Trace
 {
-	static Windows::Foundation::Diagnostics::LoggingFields ^GetMediaProperties(IMFMediaType *);
+	static HRESULT GetMediaProperties(Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingFields> *ppFields,IMFMediaType *);
+	static HRESULT CreateLoggingFields(Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingFields> *ppFields);
 public:
-	static void Initialize();
-	static Windows::Foundation::Diagnostics::LoggingActivity ^Log_ProcessInput(DWORD dwInputStreamID, IMFSample *pSample, DWORD dwFlags,REFERENCE_TIME presentationTime);
-	static Windows::Foundation::Diagnostics::LoggingActivity ^Log_ProcessOutput(DWORD dwFlags,DWORD cOutputBufferCount,REFERENCE_TIME presentationTime);
-	static void Log_SetInputType(DWORD dwStreamID, IMFMediaType *);
-	static void Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
+	static HRESULT Initialize();
+	static HRESULT Log_ProcessInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity, DWORD dwInputStreamID, IMFSample *pSample, DWORD dwFlags,REFERENCE_TIME presentationTime);
+	static HRESULT Log_ProcessOutput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,DWORD dwFlags,DWORD cOutputBufferCount,REFERENCE_TIME presentationTime);
+	static HRESULT Log_SetInputType(DWORD dwStreamID, IMFMediaType *);
+	static HRESULT Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
 };
 

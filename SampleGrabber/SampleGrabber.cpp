@@ -790,7 +790,9 @@ HRESULT CSampleGrabber::ProcessInput(
 	{
 		m_spPresentationClock->GetTime(&presentationTime);
 	}
-	CLogActivityHelper activity(Trace::Log_ProcessInput(dwInputStreamID, pSample, dwFlags, presentationTime));
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
+	Trace::Log_ProcessInput(&logActivity, dwInputStreamID, pSample, dwFlags, presentationTime);
+	CLogActivityHelper activity(logActivity.Get());
 
 	// Check input parameters.
 	if (pSample == NULL)
@@ -856,7 +858,9 @@ HRESULT CSampleGrabber::ProcessOutput(
 	{
 		m_spPresentationClock->GetTime(&presentationTime);
 	}
-	CLogActivityHelper activity(Trace::Log_ProcessOutput(dwFlags,cOutputBufferCount,presentationTime));
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
+	Trace::Log_ProcessOutput(&logActivity, dwFlags, cOutputBufferCount, presentationTime);
+	CLogActivityHelper activity(logActivity.Get());
 
 	if (dwFlags != 0)
 	{

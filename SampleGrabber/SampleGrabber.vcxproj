@@ -221,6 +221,7 @@
     <ClInclude Include="MFHelpers.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="SampleGrabber.h" />
+    <ClInclude Include="Trace.h" />
     <ClInclude Include="XDSP.h" />
   </ItemGroup>
   <ItemGroup>
@@ -235,13 +236,16 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="SampleGrabber.cpp" />
+    <ClCompile Include="Trace.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="SampleGrabber.idl">
       <HeaderFileName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)_h.h</HeaderFileName>
+      <HeaderFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">%(Filename)_h.h</HeaderFileName>
     </Midl>
   </ItemGroup>
   <ItemGroup>
+    <None Include="AudioVizualisation.wprp" />
     <None Include="SampleGrabber.def" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

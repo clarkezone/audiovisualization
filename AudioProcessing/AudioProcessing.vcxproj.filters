@@ -9,10 +9,12 @@
   <ItemGroup>
     <ClCompile Include="AudioProcessing.cpp" />
     <ClCompile Include="pch.cpp" />
+    <ClCompile Include="SpectrumAnalyzer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AudioProcessing.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="SpectrumAnalyzer.h" />
   </ItemGroup>
 </Project>
