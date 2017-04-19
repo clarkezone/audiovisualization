@@ -6,7 +6,7 @@
  /* File created by MIDL compiler version 8.01.0622 */
 /* at Tue Jan 19 05:14:07 2038
  */
-/* Compiler settings for C:\Users\tonuv\AppData\Local\Temp\SampleGrabber.idl-b57eb24b:
+/* Compiler settings for C:\Users\tonuv\AppData\Local\Temp\SampleGrabber.idl-c785bb50:
     Oicf, W1, Zp8, env=Win32 (32b run), target_arch=X86 8.01.0622 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
@@ -874,6 +874,39 @@ EXTERN_C const IID IID___x_ABI_CSampleGrabber_CIMyInterface;
                 virtual HRESULT STDMETHODCALLTYPE GetSingleData( 
                     /* [out][retval] */ ABI::SampleGrabber::Data *result) = 0;
                 
+                virtual HRESULT STDMETHODCALLTYPE GetFrame( 
+                    /* [out][retval] */ ABI::Windows::Media::IAudioFrame **result) = 0;
+                
+                virtual HRESULT STDMETHODCALLTYPE Configure( 
+                    /* [in] */ float outSampleRate,
+                    /* [in] */ float overlapPercent,
+                    /* [in] */ unsigned long fftLength) = 0;
+                
+                virtual HRESULT STDMETHODCALLTYPE SetLogFScale( 
+                    /* [in] */ float lowFrequency,
+                    /* [in] */ float highFrequency,
+                    /* [in] */ unsigned long numberOfBins) = 0;
+                
+                virtual HRESULT STDMETHODCALLTYPE SetLinearFScale( void) = 0;
+                
+                virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_IsLogFrequencyScale( 
+                    /* [out][retval] */ boolean *result) = 0;
+                
+                virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_LowFrequency( 
+                    /* [out][retval] */ float *result) = 0;
+                
+                virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_HighFrequency( 
+                    /* [out][retval] */ float *result) = 0;
+                
+                virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_FrequencyStep( 
+                    /* [out][retval] */ float *result) = 0;
+                
+                virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_Channels( 
+                    /* [out][retval] */ unsigned long *result) = 0;
+                
+                virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_FrequencyBinCount( 
+                    /* [out][retval] */ unsigned long *result) = 0;
+                
             };
 
             extern const __declspec(selectany) IID & IID_IMyInterface = __uuidof(IMyInterface);
@@ -922,6 +955,49 @@ EXTERN_C const IID IID___x_ABI_CSampleGrabber_CIMyInterface;
             __x_ABI_CSampleGrabber_CIMyInterface * This,
             /* [out][retval] */ __x_ABI_CSampleGrabber_CData *result);
         
+        HRESULT ( STDMETHODCALLTYPE *GetFrame )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ __x_ABI_CWindows_CMedia_CIAudioFrame **result);
+        
+        HRESULT ( STDMETHODCALLTYPE *Configure )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [in] */ float outSampleRate,
+            /* [in] */ float overlapPercent,
+            /* [in] */ unsigned long fftLength);
+        
+        HRESULT ( STDMETHODCALLTYPE *SetLogFScale )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [in] */ float lowFrequency,
+            /* [in] */ float highFrequency,
+            /* [in] */ unsigned long numberOfBins);
+        
+        HRESULT ( STDMETHODCALLTYPE *SetLinearFScale )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_IsLogFrequencyScale )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ boolean *result);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_LowFrequency )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ float *result);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_HighFrequency )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ float *result);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_FrequencyStep )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ float *result);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_Channels )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ unsigned long *result);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_FrequencyBinCount )( 
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [out][retval] */ unsigned long *result);
+        
         END_INTERFACE
     } __x_ABI_CSampleGrabber_CIMyInterfaceVtbl;
 
@@ -960,6 +1036,36 @@ EXTERN_C const IID IID___x_ABI_CSampleGrabber_CIMyInterface;
 
 #define __x_ABI_CSampleGrabber_CIMyInterface_GetSingleData(This,result)	\
     ( (This)->lpVtbl -> GetSingleData(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_GetFrame(This,result)	\
+    ( (This)->lpVtbl -> GetFrame(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_Configure(This,outSampleRate,overlapPercent,fftLength)	\
+    ( (This)->lpVtbl -> Configure(This,outSampleRate,overlapPercent,fftLength) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_SetLogFScale(This,lowFrequency,highFrequency,numberOfBins)	\
+    ( (This)->lpVtbl -> SetLogFScale(This,lowFrequency,highFrequency,numberOfBins) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_SetLinearFScale(This)	\
+    ( (This)->lpVtbl -> SetLinearFScale(This) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_get_IsLogFrequencyScale(This,result)	\
+    ( (This)->lpVtbl -> get_IsLogFrequencyScale(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_get_LowFrequency(This,result)	\
+    ( (This)->lpVtbl -> get_LowFrequency(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_get_HighFrequency(This,result)	\
+    ( (This)->lpVtbl -> get_HighFrequency(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_get_FrequencyStep(This,result)	\
+    ( (This)->lpVtbl -> get_FrequencyStep(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_get_Channels(This,result)	\
+    ( (This)->lpVtbl -> get_Channels(This,result) ) 
+
+#define __x_ABI_CSampleGrabber_CIMyInterface_get_FrequencyBinCount(This,result)	\
+    ( (This)->lpVtbl -> get_FrequencyBinCount(This,result) ) 
 
 #endif /* COBJMACROS */
 

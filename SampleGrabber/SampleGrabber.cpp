@@ -1,21 +1,38 @@
 #include "pch.h"
 #include "SampleGrabber.h"
 #include "Trace.h"
+#include <windows.media.core.interop.h>
 
-CSampleGrabber::CSampleGrabber() : m_pSample(nullptr), m_pOutputType(nullptr), m_pInputType(nullptr)
+
+CSampleGrabber::CSampleGrabber() : 
+	m_pSample(nullptr), 
+	m_pOutputType(nullptr), 
+	m_pInputType(nullptr),
+	m_AnalysisCompleteCallback(this,&CSampleGrabber::OnAnalysisStepComplete),
+	m_fOutputSampleRate(60.0f),
+	m_fSampleOverlapPercentage(0.5f),
+	m_bIsLogFScale(false),
+	m_FFTLength(4096),
+	m_InputSampleRate(48000)
 {
 	Trace::Initialize();
+	SetLinearFScale();
 	TRACE(L"construct");
+	m_hWQAccess = CreateSemaphore(nullptr, 1, 1, nullptr);
 }
 
 CSampleGrabber::~CSampleGrabber()
 {
 	m_pAttributes.Reset();
+	CloseHandle(m_hWQAccess);
 }
 
 // Initialize the instance.
 STDMETHODIMP CSampleGrabber::RuntimeClassInitialize()
 {
+	if (m_hWQAccess == INVALID_HANDLE_VALUE)
+		return E_FAIL;
+
 	// Create the attribute store.
 	return MFCreateAttributes(m_pAttributes.GetAddressOf(), 3);
 }
@@ -69,6 +86,120 @@ HRESULT CSampleGrabber::GetSingleData(ABI::SampleGrabber::Data *pData) {
 	ABI::SampleGrabber::Data data;
 	data.VariableOne = 256.999;
 	pData = &data;
+	return S_OK;
+}
+
+HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
+{
+	using namespace Microsoft::WRL;
+	using namespace Microsoft::WRL::Wrappers;
+	using namespace ABI::Windows::Media;
+	using namespace ABI::Windows::Foundation;
+
+	// Get current presentation position
+	MFTIME currentPosition = -1;
+	HRESULT hr = S_OK;
+	if (m_spPresentationClock != nullptr) {
+		m_spPresentationClock->GetTime(&currentPosition);
+	}
+
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
+	Trace::Log_StartGetFrame(&logActivity, currentPosition);
+	CLogActivityHelper activity(logActivity.Get());
+
+	if (currentPosition == -1)
+	{
+		*ppResult = nullptr;
+		return S_OK;
+	}
+
+	// Forward the output queue to the current presentation position and return that sample
+	// Remove samples that are in the front and not matching the current presentation time
+	ComPtr<IMFSample> spSample;
+	std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+	while (!m_AnalyzerOutput.empty())
+	{
+		REFERENCE_TIME sampleTime = 0, sampleDuration = 0;
+		hr = m_AnalyzerOutput.front()->GetSampleTime(&sampleTime);
+		if (FAILED(hr))
+			return hr;
+		hr = m_AnalyzerOutput.front()->GetSampleDuration(&sampleDuration);
+		if (FAILED(hr))
+			return hr;
+		Trace::Log_TestFrame(sampleTime, sampleDuration);
+		if (currentPosition >= sampleTime && currentPosition < sampleTime + sampleDuration)
+		{
+			m_AnalyzerOutput.front().CopyTo(&spSample);
+			break;
+		}
+		else
+		{
+			m_AnalyzerOutput.pop();
+		}
+	}
+
+	// Position not found in the queue
+	if (spSample == nullptr)
+	{
+		*ppResult = nullptr;
+		return S_OK;
+
+	}
+	
+	MULTI_QI qiFactory[1] = { { &__uuidof(IAudioFrameNativeFactory),nullptr,S_OK } };
+	hr = CoCreateInstanceFromApp(CLSID_AudioFrameNativeFactory, nullptr, CLSCTX_INPROC_SERVER, nullptr, 1, qiFactory);
+	if (FAILED(hr))
+		return hr;
+	if (FAILED(qiFactory[0].hr))
+		return qiFactory[0].hr;
+
+	ComPtr<IAudioFrameNativeFactory> nativeFactory = (IAudioFrameNativeFactory *)qiFactory[0].pItf;
+
+	// Now use the factory to create frame out of IMFSample
+	ComPtr<ABI::Windows::Media::IAudioFrame> spFrame;
+	hr = nativeFactory->CreateFromMFSample(spSample.Get(), false, IID_PPV_ARGS(&spFrame));
+
+	if (FAILED(hr))
+		return hr;
+
+	spFrame.CopyTo(ppResult);
+
+	return S_OK;
+}
+
+HRESULT CSampleGrabber::Configure(float outputSampleRate, float overlapPercentage, unsigned long fftLength)
+{
+	Trace::Log_Configure(outputSampleRate, overlapPercentage, fftLength);
+	// Allow 1- 60fps
+	if (outputSampleRate > 60.0 || outputSampleRate < 1.0)
+	{
+		return E_INVALIDARG;
+	}
+	if (overlapPercentage < 0.0 || overlapPercentage > 1.0)
+	{
+		return E_INVALIDARG;
+	}
+	if ((fftLength & (fftLength - 1)) != 0 || fftLength < 256 || fftLength > 0x20000)	// Set some limits
+	{
+		return E_INVALIDARG;
+	}
+	if (m_pInputType != nullptr)
+	{
+		UINT32 sampleRate = 0;
+		m_pInputType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &sampleRate);
+		unsigned inputLength = (unsigned) ((sampleRate / outputSampleRate) * (1 + overlapPercentage));
+		if (fftLength < inputLength)
+			return E_INVALIDARG;
+	}
+	m_fOutputSampleRate = outputSampleRate;
+	m_fSampleOverlapPercentage = overlapPercentage;
+	m_FFTLength = fftLength;
+
+	if (m_pInputType != nullptr)
+	{
+		ConfigureAnalyzer();
+	}
+
 	return S_OK;
 }
 
@@ -476,6 +607,8 @@ HRESULT CSampleGrabber::SetInputType(
 		//m_pInputType.Attach(pType);		
 		m_pInputType = pType;		
 
+		// Configure the analyzer
+		ConfigureAnalyzer();
 		// When the type changes, end streaming.
 		return EndStreaming();
 	}
@@ -523,10 +656,7 @@ HRESULT CSampleGrabber::SetOutputType(
 			{
 				return MF_E_INVALIDMEDIATYPE;
 			}
-
-
-
-			m_pOutputType.Attach(pType);
+			m_pOutputType = pType;
 		}
 		else {
 			GUID major_type;
@@ -859,7 +989,7 @@ HRESULT CSampleGrabber::ProcessOutput(
 		m_spPresentationClock->GetTime(&presentationTime);
 	}
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
-	Trace::Log_ProcessOutput(&logActivity, dwFlags, cOutputBufferCount, presentationTime);
+	Trace::Log_ProcessOutput(&logActivity, dwFlags, cOutputBufferCount, pOutputSamples, presentationTime);
 	CLogActivityHelper activity(logActivity.Get());
 
 	if (dwFlags != 0)
@@ -897,6 +1027,11 @@ HRESULT CSampleGrabber::ProcessOutput(
 	}
 
 #pragma region MyRegion
+
+	// Queue the audio frame in the analyzer buffer
+	hr = m_Analyzer.QueueInput(m_pSample.Get());
+	Trace::Log_QueueInput(m_pSample.Get(), hr);
+	BeginAnalysis();
 
 	//TODO: move this into the 
 
@@ -980,5 +1115,95 @@ HRESULT CSampleGrabber::OnFlush()
 {
 	// For this MFT, flushing just means releasing the input sample.
 	m_pSample.Reset();
+	return S_OK;
+}
+
+HRESULT CSampleGrabber::BeginAnalysis()
+{
+	Trace::Log_BeginAnalysis();
+	// See if the access semaphore is signaled
+	DWORD dwWaitResult = WaitForSingleObject(m_hWQAccess, 0);
+	if (dwWaitResult == WAIT_OBJECT_0) // 
+	{
+		HRESULT hr = MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
+		Trace::Log_PutWorkItem();
+		return hr;
+	}
+	else if (dwWaitResult == WAIT_TIMEOUT)
+	{
+		Trace::Log_AnalysisAlreadyRunning();
+		return S_FALSE;	// Analysis is already running
+	}
+	else
+		return E_FAIL;
+	
+}
+HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
+{
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
+	Trace::Log_StartAnalyzerStep(&spActivity);
+	Microsoft::WRL::ComPtr<IMFSample> spSample;
+	HRESULT hr = m_Analyzer.Step(&spSample);
+
+	REFERENCE_TIME timestamp = -1;
+	if (hr == S_OK)
+	{
+		std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+		m_AnalyzerOutput.push(spSample);
+		spSample->GetSampleDuration(&timestamp);
+	}
+	else
+	{
+		// Work is done, queue is empty, release the semaphore
+		ReleaseSemaphore(m_hWQAccess, 1, nullptr);
+		return S_OK;
+	}
+	Trace::Log_StopAnalyzerStep(spActivity.Get(), timestamp, hr);
+
+	// Schedule next work item
+	hr = MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
+	Trace::Log_PutWorkItem();
+
+	return hr;
+}
+
+HRESULT CSampleGrabber::ConfigureAnalyzer()
+{
+	if (m_pInputType == nullptr)
+		return E_FAIL;
+
+	m_pInputType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &m_InputSampleRate);
+
+	UINT32 samplesPerAnalyzerOutputFrame = (UINT32) (m_InputSampleRate / m_fOutputSampleRate);
+	UINT32 overlap = (UINT32) (samplesPerAnalyzerOutputFrame * m_fSampleOverlapPercentage);	// 50% overlap
+
+	HRESULT hr = m_Analyzer.Configure(m_pInputType.Get(), samplesPerAnalyzerOutputFrame, overlap, m_FFTLength);
+	Trace::Log_ConfigureAnalyzer(samplesPerAnalyzerOutputFrame, overlap, m_FFTLength, hr);
+	return hr;
+}
+
+STDMETHODIMP CSampleGrabber::SetLogFScale(float lowFrequency, float highFrequency, unsigned long numberOfBins)
+{
+	Trace::Log_SetLogFScale(lowFrequency, highFrequency, numberOfBins);
+	if (lowFrequency <= 0 || lowFrequency >= highFrequency || numberOfBins == 0 || highFrequency > m_InputSampleRate)
+		return E_INVALIDARG;
+
+	m_bIsLogFScale = true;
+	m_fLowFrequency = lowFrequency;
+	m_fHighFrequency = highFrequency;
+	m_FrequencyBins = numberOfBins;
+	m_fFrequencyStep = pow(m_fHighFrequency / m_fLowFrequency, 1.f / m_FrequencyBins);
+	m_Analyzer.SetLogFScale(m_fLowFrequency, m_fHighFrequency, m_FrequencyBins);
+	return S_OK;
+}
+STDMETHODIMP CSampleGrabber::SetLinearFScale()
+{
+	Trace::Log_SetLinearScale();
+	m_bIsLogFScale = false;
+	m_fLowFrequency = 0.0f;
+	m_fHighFrequency = (float) (m_InputSampleRate >> 1);
+	m_FrequencyBins = m_FFTLength >> 1;
+	m_fFrequencyStep = (float) m_InputSampleRate / (float) m_FFTLength;
+	m_Analyzer.SetLinearFScale();
 	return S_OK;
 }

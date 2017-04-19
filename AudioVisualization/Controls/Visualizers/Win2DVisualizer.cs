@@ -13,6 +13,7 @@ using AudioVisualization.Services;
 using System.Diagnostics;
 using System.Collections.Generic;
 using Microsoft.Graphics.Canvas.Text;
+using AudioVisualization.Extensions;
 
 namespace AudioVisualization.Controls.Visualizers
 {
@@ -133,63 +134,106 @@ namespace AudioVisualization.Controls.Visualizers
 
                 var center = size / 2;
 
-                // yuck
-                //lock (PassthroughEffect.GetBadLock())
+                if (PlayerService.Current.ReferencePropertySet?.ContainsKey("samplegrabber") == true)
                 {
-                    if (PlayerService.Current.ReferencePropertySet != null &&
-                        PlayerService.Current.ReferencePropertySet.ContainsKey("dataQueue") &&
-                        this.dataQueue == null)
+                    SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)PlayerService.Current.ReferencePropertySet["samplegrabber"];
+
+                    var dataFrame = mft.GetFrame();
+                    if (dataFrame != null)
                     {
-                        this.dataQueue = PlayerService.Current.ReferencePropertySet["dataQueue"] as Queue<Tuple<double, double>>;
+                        using (var data = dataFrame.AsVisualizationData())
+                        {
+                            DrawVU(ds, 20 * Math.Log10(data[data.Length-2]), 20 * Math.Log10(data[data.Length-1]));
+                            DrawSpectrogram(data, ds);
+                        }
+                    }
+                    else
+                    {
+                    }
+                    // yuck
+                    //lock (PassthroughEffect.GetBadLock())
+                    /*
+                    {
+                        if (PlayerService.Current.ReferencePropertySet != null &&
+                            PlayerService.Current.ReferencePropertySet.ContainsKey("dataQueue") &&
+                            this.dataQueue == null)
+                        {
+                            this.dataQueue = PlayerService.Current.ReferencePropertySet["dataQueue"] as Queue<Tuple<double, double>>;
+                        }
+
+                        if (this.dataQueue != null && !hasNextValue && this.dataQueue.Count>0)
+                        {
+                            nextvalue = this.dataQueue.Dequeue();
+                            hasNextValue = true;
+                        } else if (this.dataQueue != null && this.dataQueue.Count == 0)
+                        {
+                            hasNextValue = false;
+
+                        }
                     }
 
-                    if (this.dataQueue != null && !hasNextValue && this.dataQueue.Count>0)
+                    if (dataQueue != null)
                     {
-                        nextvalue = this.dataQueue.Dequeue();
-                        hasNextValue = true;
-                    } else if (this.dataQueue != null && this.dataQueue.Count == 0)
+                        Debug.WriteLine(dataQueue.Count);
+                    }
+
+                    if (!weAreVisualizing && hasNextValue)
                     {
+                        weAreVisualizing = true;
+                        delayStart = true;
+                    }
+
+                    if (weAreVisualizing && delayStart && delayCurrent < delayTotal)
+                    {
+                        delayCurrent++;
+                    }
+                    else
+                    {
+                        delayStart = false;
+                        delayCurrent = 0;
+                    }
+
+                    if (weAreVisualizing && delayStart)
+                    {
+                        DrawVU(ds, -100, -100);
+                    } else if (weAreVisualizing && !delayStart && nextvalue != null)
+                    {
+                        DrawVU(ds, nextvalue.Item1, nextvalue.Item2);
                         hasNextValue = false;
-
-                    }
+                    } else
+                    {
+                        Debug.WriteLine("miss");
+                        DrawVU(ds, -100, -100);
+                    }*/
                 }
 
-                if (dataQueue != null)
-                {
-                    Debug.WriteLine(dataQueue.Count);
-                }
-
-                if (!weAreVisualizing && hasNextValue)
-                {
-                    weAreVisualizing = true;
-                    delayStart = true;
-                }
-
-                if (weAreVisualizing && delayStart && delayCurrent < delayTotal)
-                {
-                    delayCurrent++;
-                }
-                else
-                {
-                    delayStart = false;
-                    delayCurrent = 0;
-                }
-
-                if (weAreVisualizing && delayStart)
-                {
-                    DrawVU(ds, -100, -100);
-                } else if (weAreVisualizing && !delayStart && nextvalue != null)
-                {
-                    DrawVU(ds, nextvalue.Item1, nextvalue.Item2);
-                    hasNextValue = false;
-                } else
-                {
-                    Debug.WriteLine("miss");
-                    DrawVU(ds, -100, -100);
-                }
+                swapChain.Present();
             }
+        }
 
-            swapChain.Present();
+        private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds)
+        {
+            uint elementCount = (data.Length - 2) / 2;
+            // Draw grid
+            ds.DrawRectangle(200, 20, elementCount, 412, Colors.Black);
+
+            for (int db = 0;  db >= -80; db-=20)
+            {
+                ds.DrawLine(200.0f, 20.0f - db * 2, 1000.0f, 20.0f - db * 2,Colors.LightGray);
+                ds.DrawLine(200.0f, 432f + db * 2, 1000.0f, 432f + db * 2, Colors.LightGray);
+            }
+            foreach (float f in new float[] { 50.0f,100.0f,200.0f,500.0f,1000.0f,2000.0f,5000.0f,10000.0f })
+            {
+                float x = 200 + 800.0f * (float) Math.Log10(f / 20.0) / 3.0f;
+                ds.DrawLine(x, 20, x, 432, Colors.LightGray);
+            }
+            for (uint i = 0; i < elementCount; i++)
+            {
+                float xPos = i + 200;
+                // Left channel from top down -96 = 192 0 = 0 +20
+                ds.DrawLine(xPos, 20 - 2*data[i], xPos, 212, Colors.Orange);
+                ds.DrawLine(xPos, 240, i + 200, (240 + 192)+2*data[i + elementCount], Colors.Green);
+            }
         }
 
         private bool hasNextValue;
@@ -239,7 +283,7 @@ namespace AudioVisualization.Controls.Visualizers
 
             if (!found)
             {
-                Debug.WriteLine("Not found");
+                // Debug.WriteLine("Not found");
             }
 
             for (int i = vuValues.Length - 2; i > 1; i--)

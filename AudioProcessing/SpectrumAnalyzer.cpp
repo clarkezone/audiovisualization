@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <XDSP.h>
 
+using namespace Microsoft::WRL;
+
 namespace AudioProcessing
 {
 	CSpectrumAnalyzer::CSpectrumAnalyzer() :
@@ -20,7 +22,11 @@ namespace AudioProcessing
 		m_pFftRealUnswizzled(nullptr),
 		m_pFftImagUnswizzled(nullptr),
 		m_hnsCurrentBufferTime(0L),
-		m_hnsOutputFrameTime(0L)
+		m_hnsOutputFrameTime(0L),
+		m_bUseLogScale(false),
+		m_fLogMin(20.0f),
+		m_fLogMax(20000.f),
+		m_logElementsCount(200)
 	{
 	}
 
@@ -30,10 +36,10 @@ namespace AudioProcessing
 		FreeBuffers();
 	}
 
-	HRESULT CSpectrumAnalyzer::Configure(IMFMediaType * pInputType, unsigned stepFrameCount, unsigned stepFrameOverlap,unsigned fftLength)
+	HRESULT CSpectrumAnalyzer::Configure(IMFMediaType * pInputType, unsigned stepFrameCount, unsigned stepFrameOverlap, unsigned fftLength)
 	{
 		using namespace std;
-
+		lock_guard<std::mutex> lockAccess(m_ConfigAccess);	// Object lock
 		// Validate arguments first
 		if (pInputType == nullptr)
 			return E_INVALIDARG;
@@ -111,7 +117,7 @@ namespace AudioProcessing
 		m_pFftUnityTable = static_cast<XMVECTOR *> (_aligned_malloc(2 * m_FFTLength * sizeof(XMVECTOR), 16));	// Complex values 
 		XDSP::FFTInitializeUnityTable(m_pFftUnityTable, m_FFTLength);
 
-		m_pFftReal = static_cast<XMVECTOR *>(_aligned_malloc(m_FFTLength * sizeof(XMVECTOR),16));
+		m_pFftReal = static_cast<XMVECTOR *>(_aligned_malloc(m_FFTLength * sizeof(XMVECTOR), 16));
 		m_pFftImag = static_cast<XMVECTOR *>(_aligned_malloc(m_FFTLength * sizeof(XMVECTOR), 16));
 		m_pFftRealUnswizzled = static_cast<XMVECTOR *>(_aligned_malloc(m_FFTLength * sizeof(XMVECTOR), 16));
 		m_pFftImagUnswizzled = static_cast<XMVECTOR *>(_aligned_malloc(m_FFTLength * sizeof(XMVECTOR), 16));
@@ -141,12 +147,14 @@ namespace AudioProcessing
 
 	HRESULT CSpectrumAnalyzer::QueueInput(IMFSample *pSample)
 	{
+		std::lock_guard<std::mutex> m_queueLock(m_QueueAccess);
 		m_InputQueue.push(pSample);
 		return S_OK;
 	}
 
 	HRESULT CSpectrumAnalyzer::GetNextSample()
 	{
+		std::lock_guard<std::mutex> m_queueLock(m_QueueAccess);
 		// Pull next buffer from the sample queue
 		if (m_InputQueue.empty())
 		{
@@ -159,17 +167,34 @@ namespace AudioProcessing
 		return S_OK;
 	}
 
-	HRESULT CSpectrumAnalyzer::Step(REFERENCE_TIME *pTimeStamp, float *pOutput)
+	void CSpectrumAnalyzer::AnalyzeData(DirectX::XMVECTOR *pData,float *pRMS)
 	{
 		using namespace DirectX;
+		using namespace XDSP;
+		FFT(m_pFftReal, m_pFftImag, m_pFftUnityTable, m_FFTLength);
+		FFTUnswizzle(m_pFftRealUnswizzled, m_pFftReal, m_FFTLengthPow2);
+		FFTUnswizzle(m_pFftImagUnswizzled, m_pFftImag, m_FFTLengthPow2);
 
-		// Not initialized
-		if (m_AudioChannels == 0)
-			return E_NOT_VALID_STATE;
+		XMVECTOR vRMS = XMVectorZero();
+		float fftScaler = 2.0f / m_FFTLength;
+		// Calculate abs value first half of FFT output and copy to output
+		for (size_t vIndex = 0; vIndex < m_FFTLength >> 3; vIndex++)	// vector length is 4 times shorter, copy only positive frequency values
+		{
+			XMVECTOR vRR = XMVectorMultiply(m_pFftRealUnswizzled[vIndex], m_pFftRealUnswizzled[vIndex]);
+			XMVECTOR vII = XMVectorMultiply(m_pFftImagUnswizzled[vIndex], m_pFftImagUnswizzled[vIndex]);
+			XMVECTOR vRRplusvII = XMVectorAdd(vRR, vII);
+			XMVECTOR vAbs = XMVectorSqrtEst(vRRplusvII);
+			pData[vIndex] = XMVectorScale(vAbs, fftScaler);
+			vRMS += pData[vIndex];
+		}
+		*pRMS = vRMS.m128_f32[0] + vRMS.m128_f32[1] + vRMS.m128_f32[2] + vRMS.m128_f32[3];
+	}
 
+	HRESULT CSpectrumAnalyzer::CopyDataFromInputBuffer()
+	{
 		while (m_CopiedFrameCount < m_StepFrameCount)
 		{
-			if (m_spCurrentBuffer == nullptr && GetNextSample()!=S_OK)
+			if (m_spCurrentBuffer == nullptr && GetNextSample() != S_OK)
 			{
 				return S_FALSE;	// Not enough input samples
 			}
@@ -185,75 +210,139 @@ namespace AudioProcessing
 
 
 			// Copy frames from source buffer to input buffer all copied or source buffer depleted
-			while(m_CopiedFrameCount < m_StepFrameCount && m_CurrentBufferSampleIndex < samplesInBuffer)
+			while (m_CopiedFrameCount < m_StepFrameCount && m_CurrentBufferSampleIndex < samplesInBuffer)
 			{
 				if (m_CopiedFrameCount == 0)
 				{
 					// Set the timestamp when copying the first sample
-					m_hnsOutputFrameTime = m_hnsCurrentBufferTime + 10000000L * ((long long) m_CurrentBufferSampleIndex / m_AudioChannels) / m_InputSampleRate;	
+					m_hnsOutputFrameTime = m_hnsCurrentBufferTime + 10000000L * ((long long)m_CurrentBufferSampleIndex / m_AudioChannels) / m_InputSampleRate;
 				}
 				for (size_t channelIndex = 0; channelIndex < m_AudioChannels; channelIndex++, m_InputWriteIndex++, m_CurrentBufferSampleIndex++)
 				{
 					m_pInputBuffer[m_InputWriteIndex] = pBuffer[m_CurrentBufferSampleIndex];
 				}
-				
+
 				m_CopiedFrameCount++;
-				
+
 				// Wrap write index over the end if needed
 				if (m_InputWriteIndex >= m_StepTotalFrames * m_AudioChannels)
-					m_InputWriteIndex = 0;				
+					m_InputWriteIndex = 0;
 			}
 			m_spCurrentBuffer->Unlock();
 
 			if (m_CurrentBufferSampleIndex >= samplesInBuffer)
 				m_spCurrentBuffer = nullptr; // Flag to get next buffer
 		}
-
 		m_CopiedFrameCount = 0;	// Start all over next time
 
-		// Analyze each channel separately
+		return S_OK;
+	}
+	void CSpectrumAnalyzer::CopyDataToFftBuffer(int readIndex,float *pReal)
+	{
+		for (size_t fftIndex = 0; fftIndex < m_FFTLength; fftIndex++)
+		{
+			if (fftIndex < m_StepTotalFrames)
+			{
+				pReal[fftIndex] = m_pWindow[fftIndex] * m_pInputBuffer[readIndex];
+				readIndex += m_AudioChannels;
+				if (readIndex >= m_StepTotalFrames * m_AudioChannels)	// Wrap the read index over end
+					readIndex -= m_StepTotalFrames * m_AudioChannels;
+			}
+			else
+				pReal[fftIndex] = 0;		// Pad with zeros
+		}
+
+	}
+
+	HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
+	{
+		using namespace DirectX;
+		using namespace std;
+
+		// Not initialized
+		if (m_AudioChannels == 0)
+			return E_NOT_VALID_STATE;
+
+		lock_guard<std::mutex> lockAccess(m_ConfigAccess);	// Object lock
+
+		// Copy data to the input buffer from sample queue
+		HRESULT hr = CopyDataFromInputBuffer();
+		if (hr != S_OK)
+			return hr;
+
+		// Create media sample
+		ComPtr<IMFMediaBuffer> spBuffer;
+
+		size_t outputLength = m_bUseLogScale ? m_logElementsCount : m_FFTLength;
+		// Create aligned buffer for vector math + 16 bytes for 8 floats for RMS values
+		hr = MFCreateAlignedMemoryBuffer((sizeof(float)*outputLength*m_AudioChannels) + 32, 16, &spBuffer);
+		if (FAILED(hr))
+			return hr;
+
+		spBuffer->SetCurrentLength(sizeof(float)*m_AudioChannels + sizeof(float)*m_AudioChannels*m_logElementsCount);
+
+		ComPtr<IMFSample> spSample;
+		hr = MFCreateSample(&spSample);
+		if (FAILED(hr))
+			return hr;
+
+		spSample->AddBuffer(spBuffer.Get());
+		spSample->SetSampleDuration((long long)10000000L * m_StepFrameCount / m_InputSampleRate);
+		spSample->SetSampleTime(m_hnsOutputFrameTime);
+		
+		float *pData;
+		hr = spBuffer->Lock((BYTE **)&pData, nullptr, nullptr);
+		if (FAILED(hr))
+			return hr;
+
+		// For each channel copy data to FFT buffer
 		for (size_t channelIndex = 0; channelIndex < m_AudioChannels; channelIndex++)
 		{
 			size_t readIndex = channelIndex + m_InputWriteIndex;	// After previous copy the write index will point to the starting point of the overlapped area
 
+			CopyDataToFftBuffer(readIndex, (float *)m_pFftReal);
 			memset(m_pFftImag, 0, sizeof(float)*m_FFTLength);	// Imaginary values are 0 for input
-			for (size_t fftIndex = 0; fftIndex < m_FFTLength; fftIndex++)
+
+			// One channel output is fftLength / 2, array vector size is fftLength / 4 hence fftLength >> 3
+			float *pOutData = pData + channelIndex * outputLength;
+			float *pRMSData = (float *)(pData + m_AudioChannels * outputLength);
+
+			if (m_bUseLogScale)
 			{
-				if (fftIndex < m_StepTotalFrames)
-				{
-					((float *)m_pFftReal)[fftIndex] = m_pWindow[fftIndex] * m_pInputBuffer[readIndex];
-					readIndex += m_AudioChannels;
-					if (readIndex >= m_StepTotalFrames * m_AudioChannels)	// Wrap the read index over end
-						readIndex -= m_StepTotalFrames * m_AudioChannels;
-				}
-				else
-					((float*)m_pFftReal)[fftIndex] = 0;		// Pad with zeros
+
+				AnalyzeData(m_pFftReal, pRMSData + channelIndex);
+
+				float fromFreq = 2 * m_fLogMin / m_InputSampleRate;
+				float toFreq = 2 * m_fLogMax / m_InputSampleRate;
+				AudioProcessing::mapToLogScale((float *)m_pFftReal, m_FFTLength >> 1, pOutData, m_logElementsCount, fromFreq, toFreq);
+
 			}
-			XDSP::FFT(m_pFftReal, m_pFftImag, m_pFftUnityTable, m_FFTLength);
-			XDSP::FFTUnswizzle(m_pFftRealUnswizzled, m_pFftReal, m_FFTLengthPow2);
-			XDSP::FFTUnswizzle(m_pFftImagUnswizzled, m_pFftImag, m_FFTLengthPow2);
-			
-			// Calculate abs value first half of FFT output and copy to output
-			for (size_t vIndex = 0,outIndex = channelIndex; vIndex < m_FFTLength >> 3 ; vIndex++,outIndex+=4*m_AudioChannels)	// vector length is 4 times shorter
+			else
 			{
-				XMVECTOR vRR = XMVectorMultiply(m_pFftRealUnswizzled[vIndex], m_pFftRealUnswizzled[vIndex]);
-				XMVECTOR vII = XMVectorMultiply(m_pFftImagUnswizzled[vIndex], m_pFftImagUnswizzled[vIndex]);
-				XMVECTOR vRRplusvII = XMVectorAdd(vRR, vII);
-				XMVECTOR vMag = XMVectorSqrtEst(vRRplusvII);	// Magnitude of f spectrum
-				pOutput[outIndex] = vMag.m128_f32[0];
-				pOutput[outIndex + m_AudioChannels] = vMag.m128_f32[1];
-				pOutput[outIndex + 2*m_AudioChannels] = vMag.m128_f32[2];
-				pOutput[outIndex + 3*m_AudioChannels] = vMag.m128_f32[3];
+				AnalyzeData((XMVECTOR *) pOutData, pRMSData + channelIndex);
 			}
+
+			float minLogValue = log10(1.f / 32767);	// 16 bit audio dynamic range
+													// convert to log scale
+			for (size_t index = 0; index < m_logElementsCount; index++)
+			{
+				float logValue = pOutData[index] > 0.0f ? log10(pOutData[index]) : minLogValue;
+				if (logValue < minLogValue)
+					logValue = minLogValue;
+				pOutData[index] = 20.f * logValue;
+			}
+
 		}
-		*pTimeStamp = m_hnsOutputFrameTime;
+		spBuffer->Unlock();
 
+		spSample.CopyTo(ppSample);
 		return S_OK;
-
 	}
 
 	void CSpectrumAnalyzer::Reset()
 	{
+		std::lock_guard<std::mutex> m_queueLock(m_QueueAccess);
+
 		while (!m_InputQueue.empty())
 			m_InputQueue.pop();
 
@@ -262,7 +351,7 @@ namespace AudioProcessing
 		m_CopiedFrameCount = 0;
 		m_InputWriteIndex = 0;
 	}
-
+	
 	HRESULT CSpectrumAnalyzer::Skip(REFERENCE_TIME timeStamp)
 	{
 		while (true)
@@ -284,11 +373,27 @@ namespace AudioProcessing
 				m_CopiedFrameCount = 0;
 				m_InputWriteIndex = 0;
 				// And set copy pointer to the requested location
-				m_CurrentBufferSampleIndex = m_AudioChannels * ((m_InputSampleRate*(timeStamp - m_hnsCurrentBufferTime)+(m_InputSampleRate>>1)) / 10000000L);	// Add half sample rate for appropriate rounding to avoid int math rounding errors
+				m_CurrentBufferSampleIndex = (unsigned)(m_AudioChannels * ((m_InputSampleRate*(timeStamp - m_hnsCurrentBufferTime) + (m_InputSampleRate >> 1)) / 10000000L));	// Add half sample rate for appropriate rounding to avoid int math rounding errors
 				return S_OK;
 			}
 			m_spCurrentBuffer = nullptr;
 		}
 	}
 
+	void CSpectrumAnalyzer::SetLinearFScale()
+	{
+		using namespace std;
+		lock_guard<std::mutex> lockAccess(m_ConfigAccess);	// Object lock
+		m_bUseLogScale = false;
+	}
+
+	void CSpectrumAnalyzer::SetLogFScale(float lowFrequency, float highFrequency, size_t binCount)
+	{
+		using namespace std;
+		lock_guard<std::mutex> lockAccess(m_ConfigAccess);	// Object lock
+		m_bUseLogScale = true;
+		m_fLogMin = lowFrequency;
+		m_fLogMax = highFrequency;
+		m_logElementsCount = binCount;
+	}
 }

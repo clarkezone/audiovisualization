@@ -20,6 +20,8 @@
     <ClInclude Include="DirectXMath.h" />
     <ClInclude Include="MFHelpers.h" />
     <ClInclude Include="Trace.h" />
+    <ClInclude Include="SampleGrabber_h.h" />
+    <ClInclude Include="AsyncCallback.h" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="SampleGrabber.idl" />

@@ -17,6 +17,10 @@
 #include "DirectXMath.h"
 #include <malloc.h>
 #include "MFHelpers.h"
+#include "..\AudioProcessing\SpectrumAnalyzer.h"
+#include <queue>
+#include <mutex>
+#include "AsyncCallback.h"
 
 class CSampleGrabber
 	: public Microsoft::WRL::RuntimeClass<
@@ -36,9 +40,67 @@ public:
 	// IMediaExtension
 	STDMETHODIMP SetProperties(ABI::Windows::Foundation::Collections::IPropertySet *pConfiguration);
 
+	// IMyInterface
 	STDMETHODIMP GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SampleGrabber::Data> **pConfiguration);
 
 	STDMETHODIMP GetSingleData(ABI::SampleGrabber::Data* result);
+
+	STDMETHODIMP GetFrame(ABI::Windows::Media::IAudioFrame **pResult);
+
+	STDMETHODIMP Configure(float outputSampleRate, float overlapPercent, unsigned long fftLength);
+	STDMETHODIMP SetLogFScale(float lowFrequency, float highFrequency, unsigned long numberOfBins);
+	STDMETHODIMP SetLinearFScale();
+	STDMETHODIMP get_IsLogFrequencyScale(boolean *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_bIsLogFScale;
+		return S_OK;
+	}
+
+	STDMETHODIMP get_LowFrequency(float *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_fLowFrequency;
+		return S_OK;
+	}
+	STDMETHODIMP get_HighFrequency(float *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_fHighFrequency;
+		return S_OK;
+	}
+	STDMETHODIMP get_FrequencyStep(float *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_fFrequencyStep;
+		return S_OK;
+	}
+	STDMETHODIMP get_Channels(unsigned long *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_Channels;
+		return S_OK;
+	}
+	STDMETHODIMP get_FrequencyBinCount(unsigned long *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_FFTLength;
+		return S_OK;
+	}
+
+
 
 	// IMFTransform
 	STDMETHODIMP GetStreamLimits(
@@ -169,6 +231,18 @@ public:
 	}
 
 private:
+	// Analyzer configuration
+	float m_fOutputSampleRate;
+	float m_fSampleOverlapPercentage;
+	bool m_bIsLogFScale;
+	float m_fLowFrequency;
+	float m_fHighFrequency;
+	float m_fFrequencyStep;
+	unsigned m_FrequencyBins;
+	unsigned m_Channels;
+	unsigned m_FFTLength;
+	unsigned m_InputSampleRate;
+
 	Microsoft::WRL::ComPtr<IMFAttributes>		m_pAttributes;
 	Microsoft::WRL::ComPtr<IMFMediaType>		m_pInputType;              // Input media type.
 	Microsoft::WRL::ComPtr<IMFMediaType>		m_pOutputType;             // Output media type.
@@ -181,6 +255,14 @@ private:
 	HRESULT EndStreaming();
 	HRESULT OnFlush();
 
+	AudioProcessing::CSpectrumAnalyzer			m_Analyzer;
+	std::mutex m_QueueMutex;
+	std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
 
+	HANDLE m_hWQAccess;	
+	AsyncCallback<CSampleGrabber> m_AnalysisCompleteCallback;
+	HRESULT BeginAnalysis();
+	HRESULT ConfigureAnalyzer();
+	HRESULT OnAnalysisStepComplete(IMFAsyncResult *pResult);
 };
 
