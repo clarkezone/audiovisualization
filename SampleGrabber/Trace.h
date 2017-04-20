@@ -39,8 +39,11 @@ public:
 	static HRESULT Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT32 overlap, UINT32 fftLength, HRESULT hConfigureResult);
 	static HRESULT Log_QueueInput(IMFSample *pSample, HRESULT hResult);
 	static HRESULT Log_InputDiscontinuity();
-	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime);
-	static HRESULT Log_TestFrame(REFERENCE_TIME start, REFERENCE_TIME duration);
+	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime,size_t queueSize);
+	static HRESULT Log_TestFrame(REFERENCE_TIME currentTime,REFERENCE_TIME start, REFERENCE_TIME duration);
+	static HRESULT Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration);
+	static HRESULT Log_FrameNotFound();
+	static HRESULT Log_CreateFromMFSample(HRESULT hr);
 	static HRESULT Log_StartAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
 	static HRESULT Log_StopAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity,REFERENCE_TIME time,HRESULT hResult);
 	static HRESULT Log_BeginAnalysis();

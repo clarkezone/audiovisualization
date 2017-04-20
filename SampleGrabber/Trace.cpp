@@ -195,7 +195,7 @@ HRESULT Trace::Log_InputDiscontinuity()
 {
 	return g_spLogChannel->LogEvent(HStringReference(L"InputDiscontinutiy").Get());
 }
-HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME presentationTime)
+HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME presentationTime,size_t queueSize)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
@@ -203,21 +203,50 @@ HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILogging
 		return hr;
 
 	fields->AddTimeSpan(HStringReference(L"PresentationTime").Get(), ABI::Windows::Foundation::TimeSpan() = { presentationTime });
+	fields->AddUInt32(HStringReference(L"Queue.size").Get(),queueSize);
 	return g_spLogChannel->StartActivityWithFields(HStringReference(L"GetFrame").Get(), fields.Get(), ppActivity);
 }
 
-HRESULT Trace::Log_TestFrame(REFERENCE_TIME start, REFERENCE_TIME duration)
+HRESULT Trace::Log_TestFrame(REFERENCE_TIME currentTime, REFERENCE_TIME start, REFERENCE_TIME duration)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
 	if (FAILED(hr))
 		return hr;
-
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { start });
-	fields->AddTimeSpan(HStringReference(L"Duration").Get(), ABI::Windows::Foundation::TimeSpan() = { duration });
+	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { currentTime });
+	fields->AddTimeSpan(HStringReference(L"Start").Get(), ABI::Windows::Foundation::TimeSpan() = { start });
+	fields->AddTimeSpan(HStringReference(L"End").Get(), ABI::Windows::Foundation::TimeSpan() = { start + duration });
 
 	return g_spLogChannel->LogEventWithFields(HStringReference(L"TestFrame").Get(), fields.Get());
 
+}
+
+HRESULT Trace::Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { start });
+	fields->AddTimeSpan(HStringReference(L"Duration").Get(), ABI::Windows::Foundation::TimeSpan() = { duration });
+
+	return g_spLogChannel->LogEventWithFields(HStringReference(L"FrameFound").Get(), fields.Get());
+}
+
+HRESULT Trace::Log_FrameNotFound()
+{
+	return g_spLogChannel->LogEvent(HStringReference(L"FrameNotFound").Get());
+}
+
+HRESULT Trace::Log_CreateFromMFSample(HRESULT result)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+	fields->AddInt32WithFormat(HStringReference(L"HResult").Get(), result, LoggingFieldFormat::LoggingFieldFormat_HResult);
+
+	return g_spLogChannel->LogEventWithFields(HStringReference(L"CreateAudioFrame").Get(), fields.Get());
 }
 
 HRESULT Trace::Log_StartAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity)

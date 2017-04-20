@@ -104,7 +104,7 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	}
 
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
-	Trace::Log_StartGetFrame(&logActivity, currentPosition);
+	Trace::Log_StartGetFrame(&logActivity, currentPosition,m_AnalyzerOutput.size());
 	CLogActivityHelper activity(logActivity.Get());
 
 	if (currentPosition == -1)
@@ -126,9 +126,10 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 		hr = m_AnalyzerOutput.front()->GetSampleDuration(&sampleDuration);
 		if (FAILED(hr))
 			return hr;
-		Trace::Log_TestFrame(sampleTime, sampleDuration);
+		Trace::Log_TestFrame(currentPosition,sampleTime, sampleDuration);
 		if (currentPosition >= sampleTime && currentPosition < sampleTime + sampleDuration)
 		{
+			Trace::Log_FrameFound(sampleTime, sampleDuration);
 			m_AnalyzerOutput.front().CopyTo(&spSample);
 			break;
 		}
@@ -141,6 +142,7 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	// Position not found in the queue
 	if (spSample == nullptr)
 	{
+		Trace::Log_FrameNotFound();
 		*ppResult = nullptr;
 		return S_OK;
 
@@ -159,6 +161,7 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	ComPtr<ABI::Windows::Media::IAudioFrame> spFrame;
 	hr = nativeFactory->CreateFromMFSample(spSample.Get(), false, IID_PPV_ARGS(&spFrame));
 
+	Trace::Log_CreateFromMFSample(hr);
 	if (FAILED(hr))
 		return hr;
 
