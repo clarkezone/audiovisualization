@@ -44,10 +44,11 @@ public:
 	static HRESULT Log_StartAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
 	static HRESULT Log_StopAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity,REFERENCE_TIME time,HRESULT hResult);
 	static HRESULT Log_BeginAnalysis();
-	static HRESULT Log_PutWorkItem();
+	static HRESULT Log_PutWorkItem(HRESULT result);
 	static HRESULT Log_AnalysisAlreadyRunning();
 	static HRESULT Log_Configure(float outFrameRate, float overlapPercentage, unsigned fftLength);
 	static HRESULT Log_SetLogFScale(float lowFrequency, float highFrequency, unsigned outElementCount);
 	static HRESULT Log_SetLinearScale();
+	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
 };
 

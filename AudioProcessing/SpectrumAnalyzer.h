@@ -129,6 +129,7 @@ namespace AudioProcessing
 		REFERENCE_TIME m_hnsCurrentBufferTime;	// Timestamp of current buffer being copied
 		unsigned m_CurrentBufferSampleIndex;	// Sample index into the m_spCurrentBuffer
 		REFERENCE_TIME m_hnsOutputFrameTime;	// Timestamp for the output frame
+		unsigned long m_OutputFrameSampleOffset;	// Use sample index to avoid rounding errors 
 
 		HRESULT GetNextSample();
 		HRESULT AllocateBuffers();

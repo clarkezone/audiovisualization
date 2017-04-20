@@ -5,108 +5,35 @@
 #include "MFHelpers.h"
 #include <algorithm>
 #include <vector>
+#include <string>
+#include <iostream>
 #include <DirectXMath.h>
-
+#include "FakeClock.h"
+#include "SignalGenerator.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace Microsoft::WRL;
 using namespace std;
+using namespace Wrappers;
+
+
+namespace Microsoft {
+	namespace VisualStudio {
+		namespace CppUnitTestFramework
+		{
+			template<> std::wstring ToString<REFERENCE_TIME>(const REFERENCE_TIME& time)
+			{
+				std::wstringstream str;
+				str << time;
+				return str.str();
+			}
+		}
+	}
+}
+
 
 namespace AudioProcessingTests
 {
-	class CFakeClock : public RuntimeClass<
-		RuntimeClassFlags<RuntimeClassType::ClassicCom>,
-		IMFPresentationClock>
-	{
-		MFTIME m_Time;
-	public:
-		STDMETHODIMP GetClockCharacteristics(
-			/* [out] */ __RPC__out DWORD *pdwCharacteristics) 
-		{
-			return  E_NOTIMPL; 
-		}
-
-		STDMETHODIMP GetCorrelatedTime(
-			/* [in] */ DWORD dwReserved,
-			/* [out] */ __RPC__out LONGLONG *pllClockTime,
-			/* [out] */ __RPC__out MFTIME *phnsSystemTime) 
-		{ 
-			return  E_NOTIMPL; 
-		}
-
-		STDMETHODIMP GetContinuityKey(
-			/* [out] */ __RPC__out DWORD *pdwContinuityKey) { return  E_NOTIMPL; }
-
-		STDMETHODIMP GetState(
-			/* [in] */ DWORD dwReserved,
-			/* [out] */ __RPC__out MFCLOCK_STATE *peClockState) 
-		{
-			return  E_NOTIMPL; 
-		}
-
-		STDMETHODIMP GetProperties(
-			/* [out] */ __RPC__out MFCLOCK_PROPERTIES *pClockProperties) 
-		{ 
-			return  E_NOTIMPL; 
-		}
-
-		STDMETHODIMP SetTimeSource(
-			/* [in] */ __RPC__in_opt IMFPresentationTimeSource *pTimeSource)
-		{
-			return E_NOTIMPL;
-		};
-
-		STDMETHODIMP GetTimeSource(
-			/* [out] */ __RPC__deref_out_opt IMFPresentationTimeSource **ppTimeSource)
-		{
-			return E_NOTIMPL;
-		};
-
-		STDMETHODIMP GetTime(
-			/* [out] */ __RPC__out MFTIME *phnsClockTime)
-		{
-			*phnsClockTime = m_Time;
-			return S_OK;
-		};
-
-		STDMETHODIMP AddClockStateSink(
-			/* [in] */ __RPC__in_opt IMFClockStateSink *pStateSink)
-		{
-			return E_NOTIMPL;
-		};
-
-		STDMETHODIMP RemoveClockStateSink(
-			/* [in] */ __RPC__in_opt IMFClockStateSink *pStateSink)
-		{
-			return E_NOTIMPL;
-		};
-
-		STDMETHODIMP Start(
-			/* [in] */ LONGLONG llClockStartOffset)
-		{
-			return E_NOTIMPL;
-		};
-
-		STDMETHODIMP Stop(void)
-		{
-			return E_NOTIMPL;
-		};
-
-		STDMETHODIMP Pause(void)
-		{
-			return E_NOTIMPL;
-		};
-
-		void SetTime(MFTIME time)
-		{
-			m_Time = time;
-		}
-		CFakeClock()
-		{
-			m_Time = 0;
-		}
-	};
-
 	// Function to generate signal
 	typedef float (SignalFunc)(size_t);
 
@@ -156,7 +83,220 @@ namespace AudioProcessingTests
 			sample.CopyTo(ppSample);
 			return hr;
 		}
+
+		void Create_SampleGrabber_MFT(IMFTransform **ppMFTObject,ABI::SampleGrabber::IMyInterface **ppMyInterface)
+		{
+			ComPtr<IActivationFactory> mftFactory;
+			HRESULT hr = ABI::Windows::Foundation::GetActivationFactory(HStringReference(RuntimeClass_SampleGrabber_SampleGrabberTransform).Get(), &mftFactory);
+			ValidateSuccess(hr, L"Failed to get activation factory");
+
+			ComPtr<IInspectable> object;
+			hr = mftFactory->ActivateInstance(&object);
+			ValidateSuccess(hr, L"Failed to get create SampleGrabberTranform object");
+
+			ComPtr<ABI::SampleGrabber::IMyInterface> spAnalyzerOut;
+			hr = object.As(&spAnalyzerOut);
+			ValidateSuccess(hr, L"Unable to cast to IMyInterface");
+
+			ComPtr<IMFTransform> spTransform;
+			hr = object.As(&spTransform);
+			ValidateSuccess(hr, L"Unable to cast to IMFTransform");
+
+			spTransform.CopyTo(ppMFTObject);
+			spAnalyzerOut.CopyTo(ppMyInterface);
+		}
+
+		void Configure_MediaType_MFT(IMFTransform *pMFT, unsigned sampleRate,unsigned channels)
+		{
+			ComPtr<IMFMediaType> spMediaType;
+			CreateFloat32AudioType(sampleRate, 32, channels, &spMediaType);
+
+			HRESULT hr = pMFT->SetInputType(0, spMediaType.Get(), 0);
+			ValidateSuccess(hr, L"Failed to set input type");
+
+			hr = pMFT->SetOutputType(0, spMediaType.Get(), 0);
+			ValidateSuccess(hr, L"Failed to set output type");
+		}
+		void GetFrame_Before_Configure(ABI::SampleGrabber::IMyInterface *pAnalyzer)
+		{		
+			ComPtr<ABI::Windows::Media::IAudioFrame> spNullAudioFrame;
+			HRESULT hr = pAnalyzer->GetFrame(&spNullAudioFrame);
+			ValidateSuccess(hr, L"Call to getframe before adding data");
+			Assert::IsNull(spNullAudioFrame.Get());
+		}
+		void Create_And_Assign_Clock(CFakeClock **ppClock, IMFTransform *pMFT)
+		{
+			ComPtr<CFakeClock> spFakeClock = Make<CFakeClock>();
+			spFakeClock.CopyTo(ppClock);
+
+			ComPtr<IMFTransform> spTransform = pMFT;
+			ComPtr<IMFClockConsumer> spClockConsumer;
+			HRESULT hr = spTransform.As(&spClockConsumer);
+			ValidateSuccess(hr, L"Failed to cast MFT to IMFClockConsumer");
+
+			hr = spClockConsumer->SetPresentationClock(spFakeClock.Get());
+			ValidateSuccess(hr, L"Failed to set clock");
+		}
+		void Pump_MFT(IMFTransform *pMFT,IMFSample *pInputSample)
+		{
+			HRESULT hr = pMFT->ProcessInput(0, pInputSample, 0);
+			ValidateSuccess(hr, L"ProcessInput failed");
+			DWORD dwStatus = 0;
+			MFT_OUTPUT_DATA_BUFFER outData;
+			outData.dwStatus = 0;
+			outData.dwStreamID = 0;
+			outData.pEvents = nullptr;
+			outData.pSample = nullptr;
+
+			hr = pMFT->ProcessOutput(0, 1, &outData, &dwStatus);
+			ValidateSuccess(hr, L"ProcessOutput failed");
+			Assert::IsTrue(pInputSample == outData.pSample, L"MFT output sample not copied on ProcessOutput");
+			if (outData.pSample != nullptr)
+			{
+				outData.pSample->Release();
+			}
+		}
+		void Test_GetFrame_Timings(ABI::SampleGrabber::IMyInterface *pAnalyzer,CFakeClock *pClock,size_t testCount, REFERENCE_TIME *pClockTimes, REFERENCE_TIME *pFrameTimes,REFERENCE_TIME expectedDuration)
+		{
+			using namespace ABI::Windows::Media;
+			using namespace ABI::Windows::Foundation;
+			for (size_t testIndex = 0; testIndex < testCount; testIndex++)
+			{
+				if (pClockTimes[testIndex] != -1)
+				{
+					pClock->SetTime(pClockTimes[testIndex]);
+				}
+				ComPtr<IAudioFrame> spOutFrame;
+				HRESULT hr = pAnalyzer->GetFrame(&spOutFrame);
+				ValidateSuccess(hr, L"Unable to get frame");
+				Assert::IsTrue(spOutFrame != nullptr, L"Analyzer out frame is nullptr");
+				ComPtr<IMediaFrame> spMediaFrame;
+				hr = spOutFrame.As(&spMediaFrame);
+				ValidateSuccess(hr, L"Unable to cast to IMediaFrame");
+				ComPtr<IReference<TimeSpan>> frameDuration;
+				hr = spMediaFrame->get_Duration(&frameDuration);
+				ValidateSuccess(hr, L"Failed to get duration");
+				Assert::IsNotNull(frameDuration.Get());
+				ComPtr<IReference<TimeSpan>> frameTime;
+				hr = spMediaFrame->get_RelativeTime(&frameTime);
+				ValidateSuccess(hr, L"Failed to get time");
+				Assert::IsNotNull(frameTime.Get());
+
+				TimeSpan tsTime, tsDuration;
+				frameDuration->get_Value(&tsDuration);
+				frameTime->get_Value(&tsTime);
+
+				Assert::AreEqual(tsDuration.Duration,expectedDuration, L"Incorrect duration");
+				Assert::AreEqual(tsTime.Duration,pFrameTimes[testIndex], L"Incorrect time");
+
+			}
+
+		}
+
+		// Test the output of the analyzer
+		void Test_AnalyzerOutput(ABI::SampleGrabber::IMyInterface *pAnalyzer)
+		{
+			using namespace ABI::Windows::Media;
+			ComPtr <IAudioFrame> spFrame;
+			HRESULT hr = pAnalyzer->GetFrame(&spFrame);
+			ValidateSuccess(hr, L"Failed to get audio frame");
+
+			ComPtr<IAudioBuffer> spBuffer;
+			hr = spFrame->LockBuffer(AudioBufferAccessMode::AudioBufferAccessMode_Read, &spBuffer);
+
+			ValidateSuccess(hr, L"Failed to get audio buffer");
+		}
+		void Run_MFT_Test(unsigned sampleRate, unsigned channels)
+		{
+			using namespace ABI::Windows::Media;
+			using namespace ABI::Windows::Foundation;
+
+			REFERENCE_TIME expectedFrameDuration = 166666;
+
+			ComPtr<ABI::SampleGrabber::IMyInterface> spAnalyzerOut;
+			ComPtr<IMFTransform> spTransform;
+
+			Create_SampleGrabber_MFT(&spTransform, &spAnalyzerOut);
+
+			GetFrame_Before_Configure(spAnalyzerOut.Get());
+
+			Configure_MediaType_MFT(spTransform.Get(), sampleRate, channels);
+
+			ComPtr<CFakeClock> spFakeClock;
+			Create_And_Assign_Clock(&spFakeClock, spTransform.Get());
+
+			HRESULT hr = spAnalyzerOut->Configure(60.0f, 0.5f, 2048);
+			hr = spAnalyzerOut->SetLinearFScale();
+
+			const unsigned T1 = 32, T2 = 128;	// Indicates one period length in samples
+			const float pi = 3.14159f;
+			const float w1 = 2.0f * pi * (1.0f / T1), w2 = 2.0f * pi * (1.0f / T2);
+
+			CGenerator g(sampleRate, channels);
+
+			// Now imitate the initial feed of input by sending 3 frames with total length of 1s
+			for (size_t i = 0; i < 3; i++)
+			{
+				ComPtr<IMFSample> spInputSample;
+				g.GetSample(&spInputSample, 16000, 
+					[w1,w2] (unsigned long sampleIndex,unsigned channel)
+					{
+					return channel == 0 ? sinf(w1*sampleIndex) : 0.1f*cosf(w2*sampleIndex);
+					}
+				);
+				Pump_MFT(spTransform.Get(), spInputSample.Get());
+			}
+			// Allow for background processing
+			Sleep(300);	// Sleep for 300ms to allow processing
+
+			// Now test for output timings
+			REFERENCE_TIME setPresentationTimes[] = 
+			{ 
+				-1,							// Test initial condition - no time set
+				expectedFrameDuration - 1,	// Test border condition -> should give frame at 0
+				expectedFrameDuration,		// Test border condition -> should give frame at expectedFrameDuration
+				(expectedFrameDuration * 7)>>1 // Set in the middle of 3rd frame (at 3,5 * duration)
+			};
+			REFERENCE_TIME expectedTimes[] = { 0,0,expectedFrameDuration,500000 };
+
+			Test_GetFrame_Timings(spAnalyzerOut.Get(),
+				spFakeClock.Get(),
+				sizeof(setPresentationTimes) / sizeof(REFERENCE_TIME),
+				setPresentationTimes,
+				expectedTimes,
+				expectedFrameDuration);
+
+			Test_AnalyzerOutput(spAnalyzerOut.Get());
+		}
 	public:
+
+		TEST_CLASS_INITIALIZE(SampleGrabber_Tests_Initialize)
+		{
+			HRESULT hr = MFStartup(MF_VERSION);
+		}
+
+		TEST_CLASS_CLEANUP(SampleGrabber_Tests_Cleanup)
+		{
+			HRESULT hr = MFShutdown();
+		}
+
+		BEGIN_TEST_METHOD_ATTRIBUTE(SampleGrabber_48000_Stereo)
+			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
+			END_TEST_METHOD_ATTRIBUTE()
+			TEST_METHOD(SampleGrabber_48000_Stereo)
+		{
+			Run_MFT_Test(48000, 2);
+		}
+
+		BEGIN_TEST_METHOD_ATTRIBUTE(SampleGrabber_44100_Stereo)
+			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
+			END_TEST_METHOD_ATTRIBUTE()
+			TEST_METHOD(SampleGrabber_44100_Stereo)
+		{
+			Run_MFT_Test(44100, 2);
+		}
+
+
 		BEGIN_TEST_METHOD_ATTRIBUTE(SpectrumAnalyzer_Configure)
 			TEST_METHOD_ATTRIBUTE(L"Category",L"Analyzer")
 		END_TEST_METHOD_ATTRIBUTE()
@@ -193,132 +333,7 @@ namespace AudioProcessingTests
 			Assert::IsTrue(SUCCEEDED(analyzer.Configure(mediaType.Get(), 800, 400, 4096)), L"Configure 60fps output with 50% overlap and 2^12 fft length");
 		}
 
-		BEGIN_TEST_METHOD_ATTRIBUTE(SampleGraber_Run)
-			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
-			END_TEST_METHOD_ATTRIBUTE()
-		TEST_METHOD(SampleGraber_Run)
-		{
-			using namespace Wrappers;
-			using namespace ABI::Windows::Foundation;
-			using namespace ABI::Windows::Media;
 
-			
-			ComPtr<IActivationFactory> mftFactory;
-			HRESULT hr = ABI::Windows::Foundation::GetActivationFactory(HStringReference(RuntimeClass_SampleGrabber_SampleGrabberTransform).Get(), &mftFactory);
-			ValidateSuccess(hr, L"Failed to get activation factory");
-
-			ComPtr<IInspectable> object;
-			hr = mftFactory->ActivateInstance(&object);
-			ValidateSuccess(hr, L"Failed to get create SampleGrabberTranform object");
-
-			ComPtr<ABI::SampleGrabber::IMyInterface> spAnalyzerOut;
-			hr = object.As(&spAnalyzerOut);
-			ValidateSuccess(hr, L"Unable to cast to IMyInterface");
-			ComPtr<IAudioFrame> spNullAudioFrame;
-			hr = spAnalyzerOut->GetFrame(&spNullAudioFrame);
-			ValidateSuccess(hr, L"Call to getframe before adding data");
-			Assert::IsNull(spNullAudioFrame.Get());
-
-			// Configure the transform for operation
-			ComPtr<IMFTransform> spTransform;
-			hr = object.As(&spTransform);
-			ValidateSuccess(hr, L"Failed to cast to IMFTransform");
-
-			unsigned sampleRate = 48000;
-
-			ComPtr<IMFMediaType> spMediaType;
-			CreateFloat32AudioType(sampleRate, 32, 2, &spMediaType);
-			
-			hr = spTransform->SetInputType(0, spMediaType.Get(), 0);
-			ValidateSuccess(hr, L"Failed to set input type");
-
-			hr = spTransform->SetOutputType(0, spMediaType.Get(), 0);
-			ValidateSuccess(hr, L"Failed to set output type");
-
-			// Make fake clock and assign to transform
-			ComPtr<CFakeClock> spFakeClock = Make<CFakeClock>();
-			ComPtr<IMFClockConsumer> spClockConsumer;
-			hr = spTransform.As(&spClockConsumer);
-			ValidateSuccess(hr, L"Failed to cast MFT to IMFClockConsumer");
-
-			hr = spClockConsumer->SetPresentationClock(spFakeClock.Get());
-			ValidateSuccess(hr, L"Failed to set clock");
-
-			const unsigned T1 = 32, T2 = 128;	// Indicates one period length in samples
-			const float pi = 3.14159f;
-			const float w1 = 2.0f * pi * (1.0f / T1), w2 = 2.0f * pi * (1.0f / T2);
-
-			// Now imitate the initial feed of input by sending 3 frames with total length of 1s
-			for (size_t i = 0; i < 3; i++)
-			{
-				ComPtr<IMFSample> spInputSample;
-				CreateSignal(&spInputSample, sampleRate, 16000, i*16000, vector<function<float(int)>>() =
-				{
-					([w1](size_t sampleIndex)
-				{
-					return sinf(w1*sampleIndex);
-				}),
-						([w2](size_t sampleIndex)
-				{
-					return cosf(w2*sampleIndex);
-				})
-				});
-				
-				hr = spTransform->ProcessInput(0, spInputSample.Get(), 0);
-				ValidateSuccess(hr, L"ProcessInput failed");
-				DWORD dwStatus = 0;
-				MFT_OUTPUT_DATA_BUFFER outData;
-				outData.dwStatus = 0;
-				outData.dwStreamID = 0;
-				outData.pEvents = nullptr;
-				outData.pSample = nullptr;
-
-				hr = spTransform->ProcessOutput(0, 1, &outData, &dwStatus);
-				ValidateSuccess(hr, L"ProcessOutput failed");
-				Assert::IsTrue(spInputSample.Get() == outData.pSample, L"MFT output sample not copied on ProcessOutput");
-				if (outData.pSample != nullptr)
-				{
-					outData.pSample->Release();
-				}
-			}
-
-			// Now test for output
-
-			REFERENCE_TIME setPresentationTimes[] = { -1,166665,166666,550000 };
-			REFERENCE_TIME expectedTimes[] = { 0,0,166666,500000 };
-
-			for (size_t testIndex = 0; testIndex < sizeof(expectedTimes) / sizeof(REFERENCE_TIME); testIndex++)
-			{
-				if (setPresentationTimes[testIndex] != -1)
-				{
-					spFakeClock->SetTime(setPresentationTimes[testIndex]);
-				}
-				ComPtr<IAudioFrame> spOutFrame;
-				hr = spAnalyzerOut->GetFrame(&spOutFrame);
-				ValidateSuccess(hr, L"Unable to get frame");
-				Assert::IsTrue(spOutFrame != nullptr, L"Analyzer out frame is nullptr");
-				ComPtr<IMediaFrame> spMediaFrame;
-				hr = spOutFrame.As(&spMediaFrame);
-				ValidateSuccess(hr, L"Unable to cast to IMediaFrame");
-				ComPtr<IReference<TimeSpan>> frameDuration;
-				hr = spMediaFrame->get_Duration(&frameDuration);
-				ValidateSuccess(hr, L"Failed to get duration");
-				Assert::IsNotNull(frameDuration.Get());
-				ComPtr<IReference<TimeSpan>> frameTime;
-				hr = spMediaFrame->get_RelativeTime(&frameTime);
-				ValidateSuccess(hr, L"Failed to get time");
-				Assert::IsNotNull(frameTime.Get());
-
-				TimeSpan tsTime, tsDuration;
-				frameDuration->get_Value(&tsDuration);
-				frameTime->get_Value(&tsTime);
-
-				Assert::IsTrue(tsDuration.Duration == 166666L,L"Incorrect duration");
-				Assert::IsTrue(tsTime.Duration == expectedTimes[testIndex], L"Incorrect time");
-
-			}
-
-		}
 		BEGIN_TEST_METHOD_ATTRIBUTE(SpectrumAnalyzer_Analyze)
 			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
 			END_TEST_METHOD_ATTRIBUTE()

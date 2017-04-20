@@ -216,6 +216,7 @@ namespace AudioProcessing
 				{
 					// Set the timestamp when copying the first sample
 					m_hnsOutputFrameTime = m_hnsCurrentBufferTime + 10000000L * ((long long)m_CurrentBufferSampleIndex / m_AudioChannels) / m_InputSampleRate;
+
 				}
 				for (size_t channelIndex = 0; channelIndex < m_AudioChannels; channelIndex++, m_InputWriteIndex++, m_CurrentBufferSampleIndex++)
 				{

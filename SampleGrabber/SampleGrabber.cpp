@@ -1126,7 +1126,7 @@ HRESULT CSampleGrabber::BeginAnalysis()
 	if (dwWaitResult == WAIT_OBJECT_0) // 
 	{
 		HRESULT hr = MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
-		Trace::Log_PutWorkItem();
+		Trace::Log_PutWorkItem(hr);
 		return hr;
 	}
 	else if (dwWaitResult == WAIT_TIMEOUT)
@@ -1144,13 +1144,20 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 	Trace::Log_StartAnalyzerStep(&spActivity);
 	Microsoft::WRL::ComPtr<IMFSample> spSample;
 	HRESULT hr = m_Analyzer.Step(&spSample);
-
 	REFERENCE_TIME timestamp = -1;
+	
+	if (spSample != nullptr)
+		spSample->GetSampleTime(&timestamp);
+
+	Trace::Log_StopAnalyzerStep(spActivity.Get(), timestamp, hr);
+
 	if (hr == S_OK)
 	{
+		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spPushActivity;
+		Trace::Log_StartOutputQueuePush(&spPushActivity);
+		CLogActivityHelper pushActivity(spPushActivity.Get());
 		std::lock_guard<std::mutex> queueLock(m_QueueMutex);
 		m_AnalyzerOutput.push(spSample);
-		spSample->GetSampleDuration(&timestamp);
 	}
 	else
 	{
@@ -1158,11 +1165,10 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 		ReleaseSemaphore(m_hWQAccess, 1, nullptr);
 		return S_OK;
 	}
-	Trace::Log_StopAnalyzerStep(spActivity.Get(), timestamp, hr);
 
 	// Schedule next work item
 	hr = MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
-	Trace::Log_PutWorkItem();
+	Trace::Log_PutWorkItem(hr);
 
 	return hr;
 }

@@ -247,9 +247,15 @@ HRESULT Trace::Log_BeginAnalysis()
 	return g_spLogChannel->LogEvent(HStringReference(L"ScheduleAnalysis").Get());
 }
 
-HRESULT Trace::Log_PutWorkItem()
+HRESULT Trace::Log_PutWorkItem(HRESULT result)
 {
-	return g_spLogChannel->LogEvent(HStringReference(L"ScheduleStep").Get());
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+	fields->AddInt32WithFormat(HStringReference(L"HResult").Get(),result, LoggingFieldFormat::LoggingFieldFormat_HResult);
+
+	return g_spLogChannel->LogEventWithFields(HStringReference(L"ScheduleStep").Get(),fields.Get());
 }
 
 HRESULT Trace::Log_AnalysisAlreadyRunning()
@@ -285,5 +291,10 @@ HRESULT Trace::Log_SetLogFScale(float lowFrequency, float highFrequency, unsigne
 HRESULT Trace::Log_SetLinearScale()
 {
 	return g_spLogChannel->LogEvent(HStringReference(L"SetLinearScale").Get());
+}
+
+HRESULT Trace::Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity)
+{
+	return g_spLogChannel->StartActivity(HStringReference(L"OutputQueuePush").Get(), ppActivity);
 }
 
