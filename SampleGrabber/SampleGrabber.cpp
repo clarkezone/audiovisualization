@@ -155,17 +155,11 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	if (FAILED(qiFactory[0].hr))
 		return qiFactory[0].hr;
 
-	ComPtr<IAudioFrameNativeFactory> nativeFactory = (IAudioFrameNativeFactory *)qiFactory[0].pItf;
+	ComPtr<IAudioFrameNativeFactory> spNativeFactory = (IAudioFrameNativeFactory *)qiFactory[0].pItf;
+
 
 	// Now use the factory to create frame out of IMFSample
-	ComPtr<ABI::Windows::Media::IAudioFrame> spFrame;
-	hr = nativeFactory->CreateFromMFSample(spSample.Get(), false, IID_PPV_ARGS(&spFrame));
-
-	Trace::Log_CreateFromMFSample(hr);
-	if (FAILED(hr))
-		return hr;
-
-	spFrame.CopyTo(ppResult);
+	hr = spNativeFactory->CreateFromMFSample(spSample.Get(), false, IID_PPV_ARGS(ppResult));
 
 	return S_OK;
 }
@@ -1128,9 +1122,7 @@ HRESULT CSampleGrabber::BeginAnalysis()
 	DWORD dwWaitResult = WaitForSingleObject(m_hWQAccess, 0);
 	if (dwWaitResult == WAIT_OBJECT_0) // 
 	{
-		HRESULT hr = MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
-		Trace::Log_PutWorkItem(hr);
-		return hr;
+		return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
 	}
 	else if (dwWaitResult == WAIT_TIMEOUT)
 	{
@@ -1157,7 +1149,7 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 	if (hr == S_OK)
 	{
 		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spPushActivity;
-		Trace::Log_StartOutputQueuePush(&spPushActivity);
+		Trace::Log_StartOutputQueuePush(&spPushActivity,timestamp);
 		CLogActivityHelper pushActivity(spPushActivity.Get());
 		std::lock_guard<std::mutex> queueLock(m_QueueMutex);
 		m_AnalyzerOutput.push(spSample);
@@ -1170,10 +1162,7 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 	}
 
 	// Schedule next work item
-	hr = MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
-	Trace::Log_PutWorkItem(hr);
-
-	return hr;
+	return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
 }
 
 HRESULT CSampleGrabber::ConfigureAnalyzer()

@@ -28,6 +28,7 @@ public:
 
 class Trace
 {
+	static Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingTarget> g_spLogChannel;
 	static HRESULT GetMediaProperties(Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingFields> *ppFields,IMFMediaType *);
 	static HRESULT CreateLoggingFields(Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingFields> *ppFields);
 public:
@@ -43,15 +44,53 @@ public:
 	static HRESULT Log_TestFrame(REFERENCE_TIME currentTime,REFERENCE_TIME start, REFERENCE_TIME duration);
 	static HRESULT Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration);
 	static HRESULT Log_FrameNotFound();
-	static HRESULT Log_CreateFromMFSample(HRESULT hr);
 	static HRESULT Log_StartAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
 	static HRESULT Log_StopAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity,REFERENCE_TIME time,HRESULT hResult);
 	static HRESULT Log_BeginAnalysis();
-	static HRESULT Log_PutWorkItem(HRESULT result);
 	static HRESULT Log_AnalysisAlreadyRunning();
 	static HRESULT Log_Configure(float outFrameRate, float overlapPercentage, unsigned fftLength);
 	static HRESULT Log_SetLogFScale(float lowFrequency, float highFrequency, unsigned outElementCount);
 	static HRESULT Log_SetLinearScale();
-	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
+	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
+
+	// Func needs to confirm to HRESULT function()
+	template<class Func> inline
+		static HRESULT TrackActivity(const wchar_t*pwszActivityName, Func f)
+	{
+		using namespace ABI::Windows::Foundation::Diagnostics;
+		using namespace Microsoft::WRL;
+		using namespace Microsoft::WRL::Wrappers;
+		ComPtr<ILoggingActivity> spActivity;
+		auto eventName = HStringReference(pwszActivityName);
+		Trace::g_spLogChannel->StartActivity(eventName.Get(), &spActivity);
+		HRESULT hr = f();	// Perform the activity
+		ComPtr<ILoggingFields> spFields;
+		Trace::CreateLoggingFields(&spFields);
+		spFields->AddInt32WithFormat(HStringReference("HResult").Get(), hr, LoggingFieldFormat::LoggingFieldFormat_HResult);
+		ComPtr<ILoggingActivity2> spActivity2;
+		spActivity.As(&spActivity2);
+		spActivity2->StopActivityWithFields(eventName.Get(), spFields.Get());
+		return hr;
+	}
+
+	// Func needs to confirm to HRESULT function(const ILoggingTarget *)
+	template<class Func> inline
+		static HRESULT TrackActivityWithEvents(const wchar_t*pwszActivityName, Func f)
+	{
+		using namespace ABI::Windows::Foundation::Diagnostics;
+		using namespace Microsoft::WRL;
+		using namespace Microsoft::WRL::Wrappers;
+		ComPtr<ILoggingActivity> spActivity;
+		auto eventName = HStringReference(pwszActivityName);
+		Trace::g_spLogChannel->StartActivity(eventName.Get(), &spActivity);
+		HRESULT hr = f(Trace::g_spLogChannel.Get());	// Perform the activity
+		ComPtr<ILoggingFields> spFields;
+		Trace::CreateLoggingFields(&spFields);
+		spFields->AddInt32WithFormat(HStringReference("HResult").Get(), hr, LoggingFieldFormat::LoggingFieldFormat_HResult);
+		ComPtr<ILoggingActivity2> spActivity2;
+		spActivity.As(&spActivity2);
+		spActivity2->StopActivityWithFields(eventName.Get(), spFields.Get());
+		return hr;
+	}
 };
 

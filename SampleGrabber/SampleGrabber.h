@@ -20,6 +20,7 @@
 #include "..\AudioProcessing\SpectrumAnalyzer.h"
 #include <queue>
 #include <mutex>
+#include <concurrent_queue.h>
 #include "AsyncCallback.h"
 
 class CSampleGrabber
@@ -256,9 +257,10 @@ private:
 	HRESULT OnFlush();
 
 	AudioProcessing::CSpectrumAnalyzer			m_Analyzer;
+
 	std::mutex m_QueueMutex;
 	std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
-
+	//concurrency::concurrent_queue<Microsoft::WRL::ComPtr<IMFSample>> m_OutputQueue;
 	HANDLE m_hWQAccess;	
 	AsyncCallback<CSampleGrabber> m_AnalysisCompleteCallback;
 	HRESULT BeginAnalysis();

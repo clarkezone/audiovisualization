@@ -193,6 +193,54 @@ namespace AudioProcessingTests
 
 		}
 
+		REFERENCE_TIME Test_GetFrame_Continuity(ABI::SampleGrabber::IMyInterface *pAnalyzer, CFakeClock *pClock, REFERENCE_TIME fromTime, REFERENCE_TIME step)
+		{
+			using namespace ABI::Windows::Media;
+			using namespace ABI::Windows::Foundation;
+			REFERENCE_TIME time = fromTime;
+			int computedFrameOffset = -1;
+			ComPtr <IAudioFrame> spFrame;
+
+			do
+			{
+				pClock->SetTime(time);
+				HRESULT hr = pAnalyzer->GetFrame(&spFrame);
+				ValidateSuccess(hr, L"Failed to get audio frame");
+				if (spFrame != nullptr)
+				{
+					ComPtr<IMediaFrame> spMediaFrame;
+					hr = spFrame.As(&spMediaFrame);
+					ValidateSuccess(hr, L"Failed to cast to IMediaFrame");
+					ComPtr<IReference<TimeSpan>> spTime;
+					hr = spMediaFrame->get_RelativeTime(&spTime);
+					ValidateSuccess(hr, L"Failed to get time from output frame");
+					Assert::IsNotNull(spTime.Get(), L"RelativeTime property is null");
+					ComPtr<IReference<TimeSpan>> spDuration;
+					hr = spMediaFrame->get_Duration(&spDuration);
+					ValidateSuccess(hr, L"Failed to get duration from output frame");
+					Assert::IsNotNull(spTime.Get(), L"Duration property is null");
+					TimeSpan time, duration;
+					spTime->get_Value(&time);
+					spDuration->get_Value(&duration);
+
+					// Do the math in number of frames to avoid int math rounding errors
+					// Does not matter what the frame rate is really so use 48k
+					// This is effectively round with precision 1/48000
+					unsigned numberOfFrames = (48000u * duration.Duration + 5000000) / 10000000L;
+					unsigned frameOffset = (48000u * time.Duration + 5000000) / 10000000L;
+
+					if (computedFrameOffset != -1)
+					{
+						Assert::AreEqual(frameOffset, (unsigned) computedFrameOffset, L"Discontinuity in frames");
+					}
+					computedFrameOffset = frameOffset + numberOfFrames;
+				}
+				time += step;
+			} while (spFrame != nullptr);
+
+			return 10000000L * (long long) computedFrameOffset / 48000L;
+		}
+
 		// Test the output of the analyzer
 		void Test_AnalyzerOutput(ABI::SampleGrabber::IMyInterface *pAnalyzer)
 		{
@@ -266,7 +314,9 @@ namespace AudioProcessingTests
 				expectedTimes,
 				expectedFrameDuration);
 
-			Test_AnalyzerOutput(spAnalyzerOut.Get());
+			Test_GetFrame_Continuity(spAnalyzerOut.Get(),spFakeClock.Get(),setPresentationTimes[3],expectedFrameDuration);
+
+			// Test_AnalyzerOutput(spAnalyzerOut.Get());
 		}
 	public:
 
@@ -296,7 +346,7 @@ namespace AudioProcessingTests
 			Run_MFT_Test(44100, 2);
 		}
 
-
+		/*
 		BEGIN_TEST_METHOD_ATTRIBUTE(SpectrumAnalyzer_Configure)
 			TEST_METHOD_ATTRIBUTE(L"Category",L"Analyzer")
 		END_TEST_METHOD_ATTRIBUTE()
@@ -471,6 +521,6 @@ namespace AudioProcessingTests
 				else
 					Assert::AreEqual(0.0f, output[i]);
 			}
-		}
+		}*/
 	};
 }
