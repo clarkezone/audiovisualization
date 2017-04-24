@@ -54,8 +54,13 @@ public:
 	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
 	static HRESULT Log_OutputQueuePop(REFERENCE_TIME time, REFERENCE_TIME duration, size_t queueSize);
 	static HRESULT Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME expected);
-	static HRESULT Log_StartCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, size_t copiedFrameCount, size_t stepFrameCount, size_t currentBufferIndex);
+	static HRESULT Log_StartCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, IMFMediaBuffer *pBuffer, size_t copiedFrameCount, size_t stepFrameCount, size_t currentBufferIndex);
 	static HRESULT Log_StopCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, size_t copiedFrameCount, size_t currentBufferIndex,unsigned line,HRESULT hr);
+	static HRESULT Log_StartCopyLoop(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,size_t m_CopiedFrameCount, size_t m_StepFrameCount, size_t m_CurrentBufferSampleIndex, size_t samplesInBuffer, size_t m_AudioChannels);
+	static HRESULT Log_StopCopyLoop(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *ppActivity, size_t m_CopiedFrameCount, size_t m_StepFrameCount, size_t m_CurrentBufferSampleIndex, size_t samplesInBuffer, size_t m_AudioChannels);
+	static HRESULT Log_QIPop(IMFMediaBuffer *pBuffer, REFERENCE_TIME time);
+
+
 	static HRESULT Log_LockInputBuffer(IMFMediaBuffer *pBuffer);
 	static HRESULT Log_SetCopiedFrameTime(REFERENCE_TIME time);
 	static HRESULT Log_CopyNextSample();

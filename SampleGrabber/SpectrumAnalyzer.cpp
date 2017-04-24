@@ -163,8 +163,10 @@ HRESULT CSpectrumAnalyzer::GetNextSample()
 	}
 	m_InputQueue.front()->GetSampleTime(&m_hnsCurrentBufferTime);
 	m_InputQueue.front()->ConvertToContiguousBuffer(&m_spCurrentBuffer);
+	Trace::Log_QIPop(m_spCurrentBuffer.Get(), m_hnsCurrentBufferTime);
 	m_CurrentBufferSampleIndex = 0;
 	m_InputQueue.pop();
+
 	return S_OK;
 }
 
@@ -197,7 +199,7 @@ HRESULT CSpectrumAnalyzer::CopyDataFromInputBuffer()
 	using namespace ABI::Windows::Foundation::Diagnostics;
 
 	ComPtr<ILoggingActivity> spActivity;
-	Trace::Log_StartCopyDataFromInput(&spActivity, m_CopiedFrameCount, m_StepFrameCount,m_CurrentBufferSampleIndex / m_AudioChannels);
+	Trace::Log_StartCopyDataFromInput(&spActivity, m_spCurrentBuffer.Get(),m_CopiedFrameCount, m_StepFrameCount,m_CurrentBufferSampleIndex / m_AudioChannels);
 
 	while (m_CopiedFrameCount < m_StepFrameCount)
 	{
@@ -220,6 +222,9 @@ HRESULT CSpectrumAnalyzer::CopyDataFromInputBuffer()
 		DWORD samplesInBuffer = cbCurrentLength / sizeof(float);
 		Trace::Log_LockInputBuffer(m_spCurrentBuffer.Get());
 
+
+		ComPtr<ILoggingActivity> spCopyActivity;
+		Trace::Log_StartCopyLoop(&spActivity, m_CopiedFrameCount, m_StepFrameCount, m_CurrentBufferSampleIndex, samplesInBuffer,m_AudioChannels);
 		// Copy frames from source buffer to input buffer all copied or source buffer depleted
 		while (m_CopiedFrameCount < m_StepFrameCount && m_CurrentBufferSampleIndex < samplesInBuffer)
 		{
@@ -240,6 +245,7 @@ HRESULT CSpectrumAnalyzer::CopyDataFromInputBuffer()
 			if (m_InputWriteIndex >= m_StepTotalFrames * m_AudioChannels)
 				m_InputWriteIndex = 0;
 		}
+		Trace::Log_StopCopyLoop(spActivity.Get(), m_CopiedFrameCount, m_StepFrameCount, m_CurrentBufferSampleIndex, samplesInBuffer, m_AudioChannels);
 		m_spCurrentBuffer->Unlock();
 
 		if (m_CurrentBufferSampleIndex >= samplesInBuffer)
