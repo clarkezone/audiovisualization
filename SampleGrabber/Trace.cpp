@@ -477,11 +477,13 @@ HRESULT Trace::Log_QIPop(IMFMediaBuffer * pBuffer, REFERENCE_TIME time)
 		pBuffer->GetMaxLength(&dwMaxLength);
 		fields->AddUInt32(HStringReference(L"Samples").Get(), dwLength / sizeof(float));
 		fields->AddUInt32(HStringReference(L"MaxSamples").Get(), dwMaxLength / sizeof(float));
+		fields->AddUInt32WithFormat(HStringReference(L"Ptr").Get(), (UINT32)pBuffer, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	}
 	else
 	{
 		fields->AddEmpty(HStringReference(L"Samples").Get());
 		fields->AddEmpty(HStringReference(L"MaxSamples").Get());
+		fields->AddEmpty(HStringReference(L"Ptr").Get());
 	}
 	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
 
@@ -503,6 +505,8 @@ HRESULT Trace::Log_LockInputBuffer(IMFMediaBuffer * pBuffer)
 		pBuffer->GetMaxLength(&dwMaxLength);
 		fields->AddUInt32(HStringReference(L"Samples").Get(), dwLength / sizeof(float));
 		fields->AddUInt32(HStringReference(L"MaxSamples").Get(), dwMaxLength / sizeof(float));
+		fields->AddUInt32WithFormat(HStringReference(L"Ptr").Get(), (UINT32)pBuffer, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+
 	}
 	else
 	{

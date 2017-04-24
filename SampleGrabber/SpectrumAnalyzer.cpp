@@ -224,7 +224,7 @@ HRESULT CSpectrumAnalyzer::CopyDataFromInputBuffer()
 
 
 		ComPtr<ILoggingActivity> spCopyActivity;
-		Trace::Log_StartCopyLoop(&spActivity, m_CopiedFrameCount, m_StepFrameCount, m_CurrentBufferSampleIndex, samplesInBuffer,m_AudioChannels);
+		Trace::Log_StartCopyLoop(&spCopyActivity, m_CopiedFrameCount, m_StepFrameCount, m_CurrentBufferSampleIndex, samplesInBuffer,m_AudioChannels);
 		// Copy frames from source buffer to input buffer all copied or source buffer depleted
 		while (m_CopiedFrameCount < m_StepFrameCount && m_CurrentBufferSampleIndex < samplesInBuffer)
 		{
@@ -245,7 +245,7 @@ HRESULT CSpectrumAnalyzer::CopyDataFromInputBuffer()
 			if (m_InputWriteIndex >= m_StepTotalFrames * m_AudioChannels)
 				m_InputWriteIndex = 0;
 		}
-		Trace::Log_StopCopyLoop(spActivity.Get(), m_CopiedFrameCount, m_StepFrameCount, m_CurrentBufferSampleIndex, samplesInBuffer, m_AudioChannels);
+		Trace::Log_StopCopyLoop(spCopyActivity.Get(), m_CopiedFrameCount, m_StepFrameCount, m_CurrentBufferSampleIndex, samplesInBuffer, m_AudioChannels);
 		m_spCurrentBuffer->Unlock();
 
 		if (m_CurrentBufferSampleIndex >= samplesInBuffer)
