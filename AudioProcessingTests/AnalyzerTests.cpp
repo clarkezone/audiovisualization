@@ -226,8 +226,8 @@ namespace AudioProcessingTests
 					// Do the math in number of frames to avoid int math rounding errors
 					// Does not matter what the frame rate is really so use 48k
 					// This is effectively round with precision 1/48000
-					unsigned numberOfFrames = (48000u * duration.Duration + 5000000) / 10000000L;
-					unsigned frameOffset = (48000u * time.Duration + 5000000) / 10000000L;
+					unsigned numberOfFrames = (unsigned) ((48000u * duration.Duration + 5000000) / 10000000L);
+					unsigned frameOffset = (unsigned) ((48000u * time.Duration + 5000000) / 10000000L);
 
 					if (computedFrameOffset != -1)
 					{

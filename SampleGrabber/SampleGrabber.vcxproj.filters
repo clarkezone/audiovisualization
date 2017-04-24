@@ -12,6 +12,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="MFHelpers.cpp" />
     <ClCompile Include="Trace.cpp" />
+    <ClCompile Include="SpectrumAnalyzer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -22,6 +23,7 @@
     <ClInclude Include="Trace.h" />
     <ClInclude Include="SampleGrabber_h.h" />
     <ClInclude Include="AsyncCallback.h" />
+    <ClInclude Include="SpectrumAnalyzer.h" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="SampleGrabber.idl" />

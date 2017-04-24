@@ -223,6 +223,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="SampleGrabber.h" />
     <ClInclude Include="SampleGrabber_h.h" />
+    <ClInclude Include="SpectrumAnalyzer.h" />
     <ClInclude Include="Trace.h" />
     <ClInclude Include="XDSP.h" />
   </ItemGroup>
@@ -238,6 +239,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="SampleGrabber.cpp" />
+    <ClCompile Include="SpectrumAnalyzer.cpp" />
     <ClCompile Include="Trace.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -249,11 +251,6 @@
   <ItemGroup>
     <None Include="AudioVizualisation.wprp" />
     <None Include="SampleGrabber.def" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\AudioProcessing\AudioProcessing.vcxproj">
-      <Project>{5836478f-0d31-4b5a-a833-279a89d9d8c7}</Project>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

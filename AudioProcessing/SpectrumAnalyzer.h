@@ -66,7 +66,7 @@ namespace AudioProcessing
 					// And calculate new cubic spline interpolation values
 					currentValueIndex = inValueIntIndex;
 					T prevValue = currentValueIndex > 0 ? pInput[currentValueIndex - 1] : 0;
-					T nextValue = currentValueIndex < inputSize - 1 ? pInput[currentValueIndex + 1] : 0;
+					T nextValue = currentValueIndex < (int) inputSize - 1 ? pInput[currentValueIndex + 1] : 0;
 					spline = cubic_spline<float>(prevValue, pInput[currentValueIndex], nextValue);	// Input array index has changed so calculate new spline
 				}
 				pOutput[outIndex] = spline.get_2(fInputIndex - inValueIntIndex);	// Interpolate the value
@@ -74,10 +74,10 @@ namespace AudioProcessing
 			else
 			{
 				// More than 1 input element contributes to the value - add up and scale
-				int inValueIntNextIndex = floor(fNextIndex);
+				int inValueIntNextIndex = (int) floor(fNextIndex);
 				float sum = 0.f;
 				// Sum up values betwen index+1 and nextIndex
-				for (int index = inValueIntIndex+1; index < inValueIntNextIndex && index < inputSize; index++)
+				for (int index = inValueIntIndex+1; index < inValueIntNextIndex && index < (int) inputSize; index++)
 				{
 					sum += pInput[index];
 				}
@@ -124,7 +124,7 @@ namespace AudioProcessing
 		size_t m_logElementsCount;
 
 		std::queue<Microsoft::WRL::ComPtr<IMFSample>> m_InputQueue;
-		std::mutex m_QueueAccess;
+		Microsoft::WRL::Wrappers::CriticalSection m_csQueueLock;
 		Microsoft::WRL::ComPtr<IMFMediaBuffer> m_spCurrentBuffer;
 		REFERENCE_TIME m_hnsCurrentBufferTime;	// Timestamp of current buffer being copied
 		unsigned m_CurrentBufferSampleIndex;	// Sample index into the m_spCurrentBuffer

@@ -17,7 +17,7 @@
 #include "DirectXMath.h"
 #include <malloc.h>
 #include "MFHelpers.h"
-#include "..\AudioProcessing\SpectrumAnalyzer.h"
+#include "SpectrumAnalyzer.h"
 #include <queue>
 #include <mutex>
 #include <concurrent_queue.h>
@@ -256,11 +256,11 @@ private:
 	HRESULT EndStreaming();
 	HRESULT OnFlush();
 
-	AudioProcessing::CSpectrumAnalyzer			m_Analyzer;
+	CSpectrumAnalyzer			m_Analyzer;
 
-	std::mutex m_QueueMutex;
+	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
 	std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
-	//concurrency::concurrent_queue<Microsoft::WRL::ComPtr<IMFSample>> m_OutputQueue;
+	long m_ExpectedFrameOffset;
 	HANDLE m_hWQAccess;	
 	AsyncCallback<CSampleGrabber> m_AnalysisCompleteCallback;
 	HRESULT BeginAnalysis();

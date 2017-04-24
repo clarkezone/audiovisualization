@@ -13,7 +13,8 @@ CSampleGrabber::CSampleGrabber() :
 	m_fSampleOverlapPercentage(0.5f),
 	m_bIsLogFScale(false),
 	m_FFTLength(4096),
-	m_InputSampleRate(48000)
+	m_InputSampleRate(48000),
+	m_ExpectedFrameOffset(-1)
 {
 	Trace::Initialize();
 	SetLinearFScale();
@@ -116,7 +117,9 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	// Forward the output queue to the current presentation position and return that sample
 	// Remove samples that are in the front and not matching the current presentation time
 	ComPtr<IMFSample> spSample;
-	std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+	
+	auto lock = m_csOutputQueueAccess.Lock();
+
 	while (!m_AnalyzerOutput.empty())
 	{
 		REFERENCE_TIME sampleTime = 0, sampleDuration = 0;
@@ -126,6 +129,14 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 		hr = m_AnalyzerOutput.front()->GetSampleDuration(&sampleDuration);
 		if (FAILED(hr))
 			return hr;
+
+		long frameOffset = ((48000u * sampleTime + 5000000) / 10000000L);
+		if (m_ExpectedFrameOffset != -1 && m_ExpectedFrameOffset != frameOffset)
+		{
+			Trace::Log_OutputQueueDiscontinuity(10000000 * (long long) frameOffset / m_InputSampleRate , 
+				10000000 * (long long) m_ExpectedFrameOffset / m_InputSampleRate);
+		}
+
 		Trace::Log_TestFrame(currentPosition,sampleTime, sampleDuration);
 		if (currentPosition >= sampleTime && currentPosition < sampleTime + sampleDuration)
 		{
@@ -135,8 +146,13 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 		}
 		else
 		{
-			m_AnalyzerOutput.pop();
+			if (m_ExpectedFrameOffset == -1 || m_ExpectedFrameOffset == frameOffset)
+			{
+				m_AnalyzerOutput.pop();
+				Trace::Log_OutputQueuePop(sampleTime, sampleDuration, m_AnalyzerOutput.size());
+			}
 		}
+		m_ExpectedFrameOffset = frameOffset;
 	}
 
 	// Position not found in the queue
@@ -1151,7 +1167,7 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spPushActivity;
 		Trace::Log_StartOutputQueuePush(&spPushActivity,timestamp);
 		CLogActivityHelper pushActivity(spPushActivity.Get());
-		std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+		auto lock =  m_csOutputQueueAccess.Lock();
 		m_AnalyzerOutput.push(spSample);
 	}
 	else

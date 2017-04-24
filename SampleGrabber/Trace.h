@@ -52,6 +52,13 @@ public:
 	static HRESULT Log_SetLogFScale(float lowFrequency, float highFrequency, unsigned outElementCount);
 	static HRESULT Log_SetLinearScale();
 	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
+	static HRESULT Log_OutputQueuePop(REFERENCE_TIME time, REFERENCE_TIME duration, size_t queueSize);
+	static HRESULT Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME expected);
+	static HRESULT Log_StartCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, size_t copiedFrameCount, size_t stepFrameCount, size_t currentBufferIndex);
+	static HRESULT Log_StopCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, size_t copiedFrameCount, size_t currentBufferIndex,unsigned line,HRESULT hr);
+	static HRESULT Log_LockInputBuffer(IMFMediaBuffer *pBuffer);
+	static HRESULT Log_SetCopiedFrameTime(REFERENCE_TIME time);
+	static HRESULT Log_CopyNextSample();
 
 	// Func needs to confirm to HRESULT function()
 	template<class Func> inline

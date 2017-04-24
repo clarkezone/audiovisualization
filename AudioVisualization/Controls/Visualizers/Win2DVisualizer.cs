@@ -29,6 +29,14 @@ namespace AudioVisualization.Controls.Visualizers
 
         public Win2DVisualizer()
         {
+            // Assume here stereo audio
+            m_VolumeData = new float[2] { -96.0f, -96.0f };
+            m_PeakVolumeData = new float[2] { -96.0f, -96.0f };
+
+            // Assume stereo with 800 data points, 10 times less for peak data
+            m_SpectralData = new float[][] { new float[800], new float[800] };
+            m_SpectralPeakData = new float[][] { new float[80], new float[800] };
+
             CreateDevice();
             _swapChainVisual = _compositor.CreateSpriteVisual();
             _rootVisual.Children.InsertAtTop(_swapChainVisual);
@@ -125,6 +133,22 @@ namespace AudioVisualization.Controls.Visualizers
         double[] leftCurrent;
         double[] rightCurrent;
 
+        float[][] m_SpectralData;
+        float[][] m_SpectralPeakData;
+        float[] m_VolumeData;
+        float[] m_PeakVolumeData;
+        const float meterRiseTime = 0.9f;           // Every 1/60 frame rise 90% of the diff value
+        const float meterFallTime = 0.3f;
+        const float peakMeterRiseTime = 1.0f;       // Fast rise
+        const float peakMeterFallTime = 0.003f;     // Slow fall time
+
+        float VolumeToDb(float vol)
+        {
+            if (vol <= 0.0f)
+                return -96.0f;
+            float db = 20.0f * (float)Math.Log10(vol);
+            return db >= -96.0f ? db : -96.0f;
+        }
         void DrawSwapChain(CanvasSwapChain swapChain)
         {
             using (var ds = swapChain.CreateDrawingSession(Colors.Transparent))
@@ -143,12 +167,13 @@ namespace AudioVisualization.Controls.Visualizers
                     {
                         using (var data = dataFrame.AsVisualizationData())
                         {
-                            DrawVU(ds, 20 * Math.Log10(data[data.Length-2]), 20 * Math.Log10(data[data.Length-1]));
+                            DrawVU(ds, VolumeToDb(data[data.Length - 2]), VolumeToDb(data[data.Length - 1]));
                             DrawSpectrogram(data, ds);
                         }
                     }
                     else
                     {
+                        DrawVU(ds, -96.0f, -96.0f);
                     }
                     // yuck
                     //lock (PassthroughEffect.GetBadLock())
@@ -214,25 +239,41 @@ namespace AudioVisualization.Controls.Visualizers
         private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds)
         {
             uint elementCount = (data.Length - 2) / 2;
-            // Draw grid
-            ds.DrawRectangle(200, 20, elementCount, 412, Colors.Black);
 
-            for (int db = 0;  db >= -80; db-=20)
+            if (elementCount != 800)
+                return;
+
+            // Draw grid
+            ds.DrawRectangle(200, 20, 800, 200, Colors.Black);
+            ds.DrawRectangle(200, 240, 800, 200, Colors.Black);
+            for (int db = 0; db >= -80; db -= 20)
             {
-                ds.DrawLine(200.0f, 20.0f - db * 2, 1000.0f, 20.0f - db * 2,Colors.LightGray);
+                ds.DrawLine(200.0f, 20.0f - db * 2, 1000.0f, 20.0f - db * 2, Colors.LightGray);
                 ds.DrawLine(200.0f, 432f + db * 2, 1000.0f, 432f + db * 2, Colors.LightGray);
             }
-            foreach (float f in new float[] { 50.0f,100.0f,200.0f,500.0f,1000.0f,2000.0f,5000.0f,10000.0f })
+
+            CanvasTextFormat textFormat = new CanvasTextFormat();
+            textFormat.FontSize = 9;
+            textFormat.HorizontalAlignment = CanvasHorizontalAlignment.Center;
+            textFormat.VerticalAlignment = CanvasVerticalAlignment.Top;
+
+            foreach (float f in new float[] { 20.0f, 32.0f, 50.0f, 75.0f, 100.0f, 150.0f, 200.0f, 320.0f, 500.0f, 750.0f, 1000.0f, 1500.0f, 2000.0f, 3200.0f, 5000.0f, 7500.0f, 10000.0f, 15000.0f, 20000.0f })
             {
-                float x = 200 + 800.0f * (float) Math.Log10(f / 20.0) / 3.0f;
-                ds.DrawLine(x, 20, x, 432, Colors.LightGray);
+                float x = 200 + 800.0f * (float)Math.Log10(f / 20.0) / 3.0f;
+                ds.DrawLine(x, 20, x, 212, Colors.LightGray);
+                ds.DrawLine(x, 240, x, 432, Colors.LightGray);
+
+                string text = f >= 1000.0f ? $"{f / 1000.0}k" : $"{f}";
+                ds.DrawText(text, x, 220, Colors.Black, textFormat);
+                ds.DrawText(text, x, 440, Colors.Black, textFormat);
             }
-            for (uint i = 0; i < elementCount; i++)
+
+            for (uint i = 0; i < 800; i++)
             {
                 float xPos = i + 200;
                 // Left channel from top down -96 = 192 0 = 0 +20
-                ds.DrawLine(xPos, 20 - 2*data[i], xPos, 212, Colors.Orange);
-                ds.DrawLine(xPos, 240, i + 200, (240 + 192)+2*data[i + elementCount], Colors.Green);
+                ds.DrawLine(xPos, 20 - 2 * data[i], xPos, 212, Colors.Orange);
+                ds.DrawLine(xPos, 240, xPos, (240 + 192) + 2 * data[i + elementCount], Colors.Green);
             }
         }
 
@@ -244,7 +285,7 @@ namespace AudioVisualization.Controls.Visualizers
         private bool delayStart = false;
         private bool weAreVisualizing = false;
 
-        void DrawVU(CanvasDrawingSession ds, double volumeLeft, double volumeRight)
+        void DrawVU(CanvasDrawingSession ds, float volumeLeft, float volumeRight)
         {
             //TODO: move consts out of here
 
@@ -260,16 +301,32 @@ namespace AudioVisualization.Controls.Visualizers
             const float segmentHeight = 15.0f;
             const float segmentWidth = 50.0f;
 
-            int[] vuValues = { -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0 };
+            float[] vuValues = { -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0 };
             Size segmentSize = new Size(segmentWidth, segmentHeight);
             Point positionLeft = new Point(channelGap * 4, channelGap * 2);
             Point positionRight = new Point(positionLeft.X + segmentWidth + channelGap, positionLeft.Y);
             Rect segmentLeft = new Rect(positionLeft, segmentSize);
             Rect segmentRight = new Rect(positionRight, segmentSize);
 
-            int leftActiveIndex = -1;
-            int rightActiveIndex = -1;
+            // Calculate real VU meter values with rise and fall times
+            m_VolumeData[0] -= (m_VolumeData[0] - volumeLeft) * (m_VolumeData[0] < volumeLeft ? meterRiseTime : meterFallTime);
+            m_VolumeData[1] -= (m_VolumeData[1] - volumeRight) * (m_VolumeData[1] < volumeRight ? meterRiseTime : meterFallTime);
 
+            m_PeakVolumeData[0] -= (m_PeakVolumeData[0] - volumeLeft) * (m_PeakVolumeData[0] < volumeLeft ? peakMeterRiseTime : peakMeterFallTime);
+            m_PeakVolumeData[1] -= (m_PeakVolumeData[1] - volumeRight) * (m_PeakVolumeData[1] < volumeRight ? peakMeterRiseTime : peakMeterFallTime);
+
+            // Match meter values to meter indexes
+            int foundIndex = Array.BinarySearch<float>(vuValues, m_VolumeData[0]);
+            int leftActiveIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+            foundIndex = Array.BinarySearch<float>(vuValues, m_VolumeData[1]);
+            int rightActiveIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+
+            foundIndex = Array.BinarySearch<float>(vuValues, m_PeakVolumeData[0]);
+            int leftPeakIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+            foundIndex = Array.BinarySearch<float>(vuValues, m_PeakVolumeData[1]);
+            int rightPeakIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+
+            /* TODO - Remove replaced with Array.BinarySearch above
             bool found = false;
             for (int i = vuValues.Length - 2; i > 1; i--)
             {
@@ -293,7 +350,7 @@ namespace AudioVisualization.Controls.Visualizers
                     rightActiveIndex = i;
                     break;
                 }
-            }
+            }*/
 
             Color litColor;
             Color unLitColor;
@@ -331,7 +388,7 @@ namespace AudioVisualization.Controls.Visualizers
 
                 segmentLeft = new Rect(positionLeft, segmentSize);
 
-                if (i <= leftActiveIndex)
+                if (i <= leftActiveIndex || i == leftPeakIndex)
                 {
                     ds.FillRectangle(segmentLeft, litColor);
                 }
@@ -343,7 +400,7 @@ namespace AudioVisualization.Controls.Visualizers
 
                 segmentRight = new Rect(positionRight, segmentSize);
 
-                if (i <= rightActiveIndex)
+                if (i <= rightActiveIndex || i == rightPeakIndex)
                 {
                     ds.FillRectangle(segmentRight, litColor);
                 }

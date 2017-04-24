@@ -147,14 +147,15 @@ namespace AudioProcessing
 
 	HRESULT CSpectrumAnalyzer::QueueInput(IMFSample *pSample)
 	{
-		std::lock_guard<std::mutex> m_queueLock(m_QueueAccess);
+		auto lock = m_csQueueLock.Lock();
 		m_InputQueue.push(pSample);
 		return S_OK;
 	}
 
 	HRESULT CSpectrumAnalyzer::GetNextSample()
 	{
-		std::lock_guard<std::mutex> m_queueLock(m_QueueAccess);
+		auto lock = m_csQueueLock.Lock();
+		
 		// Pull next buffer from the sample queue
 		if (m_InputQueue.empty())
 		{
@@ -342,7 +343,7 @@ namespace AudioProcessing
 
 	void CSpectrumAnalyzer::Reset()
 	{
-		std::lock_guard<std::mutex> m_queueLock(m_QueueAccess);
+		auto lock = m_csQueueLock.Lock();
 
 		while (!m_InputQueue.empty())
 			m_InputQueue.pop();
