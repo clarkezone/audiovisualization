@@ -5,7 +5,8 @@
 #include "Trace.h"
 
 using namespace Microsoft::WRL;
-
+#undef max
+#undef min
 
 CSpectrumAnalyzer::CSpectrumAnalyzer() :
 	m_AudioChannels(0),
@@ -24,10 +25,13 @@ CSpectrumAnalyzer::CSpectrumAnalyzer() :
 	m_pFftImagUnswizzled(nullptr),
 	m_hnsCurrentBufferTime(0L),
 	m_hnsOutputFrameTime(0L),
-	m_bUseLogScale(false),
+	m_bUseLogFScale(false),
 	m_fLogMin(20.0f),
 	m_fLogMax(20000.f),
-	m_logElementsCount(200)
+	m_logElementsCount(200),
+	m_bUseLogAmpScale(false),
+	m_vClampAmpLow(DirectX::XMVectorReplicate(std::numeric_limits<float>::min())),
+	m_vClampAmpHigh(DirectX::XMVectorReplicate(std::numeric_limits<float>::min()))
 {
 }
 
@@ -147,25 +151,25 @@ void CSpectrumAnalyzer::FreeBuffers()
 
 HRESULT CSpectrumAnalyzer::QueueInput(IMFSample *pSample)
 {
-	auto lock = m_csQueueLock.Lock();
 	m_InputQueue.push(pSample);
+	Trace::Log_QueueInput(pSample);
 	return S_OK;
 }
 
 HRESULT CSpectrumAnalyzer::GetNextSample()
 {
-	auto lock = m_csQueueLock.Lock();
-
-	// Pull next buffer from the sample queue
-	if (m_InputQueue.empty())
+	sample_queue_item item;
+	if (m_InputQueue.try_pop(item))
+	{
+		m_hnsCurrentBufferTime = item.time;
+		m_spCurrentBuffer = item.buffer;
+		m_CurrentBufferSampleIndex = 0;
+		Trace::Log_QIPop(m_spCurrentBuffer.Get(), m_hnsCurrentBufferTime);
+	}
+	else
 	{
 		return S_FALSE;
 	}
-	m_InputQueue.front()->GetSampleTime(&m_hnsCurrentBufferTime);
-	m_InputQueue.front()->ConvertToContiguousBuffer(&m_spCurrentBuffer);
-	Trace::Log_QIPop(m_spCurrentBuffer.Get(), m_hnsCurrentBufferTime);
-	m_CurrentBufferSampleIndex = 0;
-	m_InputQueue.pop();
 
 	return S_OK;
 }
@@ -275,6 +279,13 @@ void CSpectrumAnalyzer::CopyDataToFftBuffer(int readIndex, float *pReal)
 
 }
 
+DirectX::XMVECTOR g_vLog10DbScaler = DirectX::XMVectorReplicate(8.68588f); // This is 20.0/LogE(10)
+																		   // {3F692E37-FC20-48DD-93D2-2234E1B1AA23}
+// GUID to pass the aligned buffer size
+static const GUID g_PropBufferStep =
+{ 0x3f692e37, 0xfc20, 0x48dd,{ 0x93, 0xd2, 0x22, 0x34, 0xe1, 0xb1, 0xaa, 0x23 } };
+
+
 HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 {
 	using namespace DirectX;
@@ -293,13 +304,16 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 	// Create media sample
 	ComPtr<IMFMediaBuffer> spBuffer;
 
-	size_t outputLength = m_bUseLogScale ? m_logElementsCount : m_FFTLength;
+	size_t outputLength = m_bUseLogFScale ? m_logElementsCount : m_FFTLength;
+	
 	// Create aligned buffer for vector math + 16 bytes for 8 floats for RMS values
-	hr = MFCreateAlignedMemoryBuffer((sizeof(float)*outputLength*m_AudioChannels) + 32, 16, &spBuffer);
+	// To use vector math allocate buffer for each channel which is rounded up to the next 16 byte boundary
+	size_t vOutputLength = (outputLength + 3) >> 2;
+	hr = MFCreateAlignedMemoryBuffer((sizeof(XMVECTOR)*vOutputLength*m_AudioChannels) + 2*sizeof(XMVECTOR), 16, &spBuffer);
 	if (FAILED(hr))
 		return hr;
 
-	spBuffer->SetCurrentLength(sizeof(float)*m_AudioChannels + sizeof(float)*m_AudioChannels*outputLength);
+	spBuffer->SetCurrentLength(sizeof(XMVECTOR)*(2 + m_AudioChannels * vOutputLength));
 
 	ComPtr<IMFSample> spSample;
 	hr = MFCreateSample(&spSample);
@@ -310,10 +324,16 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 	spSample->SetSampleDuration((long long)10000000L * m_StepFrameCount / m_InputSampleRate);
 	spSample->SetSampleTime(m_hnsOutputFrameTime);
 
+	// Append the channel buffer length as a property
+	spSample->SetUINT32(g_PropBufferStep, vOutputLength << 2);
+
 	float *pData;
 	hr = spBuffer->Lock((BYTE **)&pData, nullptr, nullptr);
 	if (FAILED(hr))
 		return hr;
+
+	float *pRMSData = (float *)(pData + m_AudioChannels * (vOutputLength << 2));
+	*((XMVECTOR *)pRMSData) = DirectX::g_XMZero;	// Zero RMS values as vector value
 
 	// For each channel copy data to FFT buffer
 	for (size_t channelIndex = 0; channelIndex < m_AudioChannels; channelIndex++)
@@ -324,35 +344,33 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 		memset(m_pFftImag, 0, sizeof(float)*m_FFTLength);	// Imaginary values are 0 for input
 
 		// One channel output is fftLength / 2, array vector size is fftLength / 4 hence fftLength >> 3
-		float *pOutData = pData + channelIndex * outputLength;
-		float *pRMSData = (float *)(pData + m_AudioChannels * outputLength);
+		float *pOutData = pData + channelIndex * (vOutputLength << 2);
 
-		if (m_bUseLogScale)
+		if (m_bUseLogFScale)
 		{
-
 			AnalyzeData(m_pFftReal, pRMSData + channelIndex);
-
 			float fromFreq = 2 * m_fLogMin / m_InputSampleRate;
 			float toFreq = 2 * m_fLogMax / m_InputSampleRate;
 			mapToLogScale((float *)m_pFftReal, m_FFTLength >> 1, pOutData, m_logElementsCount, fromFreq, toFreq);
-
 		}
 		else
 		{
 			AnalyzeData((XMVECTOR *)pOutData, pRMSData + channelIndex);
 		}
-
-		float minLogValue = log10(1.f / 32767);	// 16 bit audio dynamic range
-												// convert to log scale
-		for (size_t index = 0; index < m_logElementsCount; index++)
-		{
-			float logValue = pOutData[index] > 0.0f ? log10(pOutData[index]) : minLogValue;
-			if (logValue < minLogValue)
-				logValue = minLogValue;
-			pOutData[index] = 20.f * logValue;
-		}
-
 	}
+	// Scale the output value, we can use vector math as there is space after the buffer and it is aligned
+	if (m_bUseLogAmpScale)
+	{
+
+		XMVECTOR *pvData = (XMVECTOR *) pData;
+		// Process all amplitude and RMS values in one pass
+		for (size_t vIndex = 0; vIndex < m_AudioChannels * vOutputLength + 2; vIndex++)
+		{
+			XMVECTOR vLog = XMVectorLogE(pvData[vIndex]) * g_vLog10DbScaler;
+			pvData[vIndex] = XMVectorClamp(vLog, m_vClampAmpLow, m_vClampAmpHigh);
+		}
+	}
+
 	spBuffer->Unlock();
 
 	spSample.CopyTo(ppSample);
@@ -361,11 +379,9 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 
 void CSpectrumAnalyzer::Reset()
 {
-	auto lock = m_csQueueLock.Lock();
-
-	while (!m_InputQueue.empty())
-		m_InputQueue.pop();
-
+	m_InputQueue.clear();
+	m_CurrentBufferSampleIndex = 0;
+	m_spCurrentBuffer = nullptr;
 	// Clean up any state from buffer copying
 	memset(m_pInputBuffer, 0, m_StepTotalFrames * m_AudioChannels * sizeof(float));
 	m_CopiedFrameCount = 0;
@@ -403,13 +419,29 @@ HRESULT CSpectrumAnalyzer::Skip(REFERENCE_TIME timeStamp)
 void CSpectrumAnalyzer::SetLinearFScale()
 {
 	auto lock = m_csConfigAccess.Lock();	// Lock object for config changes
-	m_bUseLogScale = false;
+	m_bUseLogFScale = false;
+}
+
+void CSpectrumAnalyzer::SetLogAmplitudeScale(float clampToLow, float clampToHigh)
+{
+	auto lock = m_csConfigAccess.Lock();	// Lock object for config changes
+	m_bUseLogAmpScale = true;
+	m_vClampAmpLow = DirectX::XMVectorReplicate(clampToLow);
+	m_vClampAmpHigh = DirectX::XMVectorReplicate(clampToHigh);
+}
+
+void CSpectrumAnalyzer::SetLinearAmplitudeScale()
+{
+	auto lock = m_csConfigAccess.Lock();	// Lock object for config changes
+	m_bUseLogAmpScale = false;
+	m_vClampAmpLow = DirectX::XMVectorReplicate(std::numeric_limits<float>::min());
+	m_vClampAmpHigh = DirectX::XMVectorReplicate(std::numeric_limits<float>::max());
 }
 
 void CSpectrumAnalyzer::SetLogFScale(float lowFrequency, float highFrequency, size_t binCount)
 {
 	auto lock = m_csConfigAccess.Lock();	// Lock object for config changes
-	m_bUseLogScale = true;
+	m_bUseLogFScale = true;
 	m_fLogMin = lowFrequency;
 	m_fLogMax = highFrequency;
 	m_logElementsCount = binCount;

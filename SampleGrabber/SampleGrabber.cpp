@@ -18,6 +18,7 @@ CSampleGrabber::CSampleGrabber() :
 {
 	Trace::Initialize();
 	SetLinearFScale();
+	m_Analyzer.SetLogAmplitudeScale(-100.0f, 100.0f);
 	TRACE(L"construct");
 	m_hWQAccess = CreateSemaphore(nullptr, 1, 1, nullptr);
 }
@@ -1043,7 +1044,6 @@ HRESULT CSampleGrabber::ProcessOutput(
 
 	// Queue the audio frame in the analyzer buffer
 	hr = m_Analyzer.QueueInput(m_pSample.Get());
-	Trace::Log_QueueInput(m_pSample.Get(), hr);
 	BeginAnalysis();
 
 	//TODO: move this into the 

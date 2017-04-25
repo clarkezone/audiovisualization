@@ -38,7 +38,7 @@ public:
 	static HRESULT Log_SetInputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT32 overlap, UINT32 fftLength, HRESULT hConfigureResult);
-	static HRESULT Log_QueueInput(IMFSample *pSample, HRESULT hResult);
+	static HRESULT Log_QueueInput(IMFSample *pSample);
 	static HRESULT Log_InputDiscontinuity();
 	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime,size_t queueSize);
 	static HRESULT Log_TestFrame(REFERENCE_TIME currentTime,REFERENCE_TIME start, REFERENCE_TIME duration);

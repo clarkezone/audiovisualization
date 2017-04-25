@@ -10,6 +10,9 @@
 #include <DirectXMath.h>
 #include "FakeClock.h"
 #include "SignalGenerator.h"
+#include <windows.foundation.h>
+#include <MemoryBuffer.h>
+
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace Microsoft::WRL;
@@ -36,6 +39,13 @@ namespace AudioProcessingTests
 {
 	// Function to generate signal
 	typedef float (SignalFunc)(size_t);
+
+	template <class T, class U> ComPtr<T> As(Microsoft::WRL::ComPtr<U> spU)
+	{
+		ComPtr<T> spT;
+		spU.As(&spT);
+		return spT;
+	}
 
 	TEST_CLASS(AnalyzerTests)
 	{
@@ -186,9 +196,8 @@ namespace AudioProcessingTests
 				frameDuration->get_Value(&tsDuration);
 				frameTime->get_Value(&tsTime);
 
-				Assert::AreEqual(tsDuration.Duration,expectedDuration, L"Incorrect duration");
-				Assert::AreEqual(tsTime.Duration,pFrameTimes[testIndex], L"Incorrect time");
-
+				Assert::AreEqual(expectedDuration, tsDuration.Duration, L"Incorrect duration");
+				Assert::AreEqual(pFrameTimes[testIndex], tsTime.Duration,  L"Incorrect time");			
 			}
 
 		}
@@ -254,12 +263,67 @@ namespace AudioProcessingTests
 
 			ValidateSuccess(hr, L"Failed to get audio buffer");
 		}
-		void Run_MFT_Test(unsigned sampleRate, unsigned channels)
+
+		void Test_Levels(ABI::SampleGrabber::IMyInterface *pAnalyzer,size_t fftLength,size_t channels)
+		{
+			using namespace ABI::Windows::Media;
+			using namespace ABI::Windows::Foundation;
+			ComPtr <IAudioFrame> spFrame;
+			HRESULT hr = pAnalyzer->GetFrame(&spFrame);
+			ValidateSuccess(hr, L"Failed to get audio frame");
+
+			ComPtr<IAudioBuffer> spBuffer;
+			hr = spFrame->LockBuffer(AudioBufferAccessMode::AudioBufferAccessMode_Read, &spBuffer);
+
+			ValidateSuccess(hr, L"Failed to get audio buffer");
+			UINT32 length;
+			hr = spBuffer->get_Length(&length);
+			ValidateSuccess(hr, L"Failed to get audio buffer");
+			UINT32 expectedLength = (fftLength * channels) + 8;
+			Assert::AreEqual(expectedLength * sizeof(float), length,L"Unexpected buffer length",LINE_INFO());
+
+		
+			ComPtr<IMemoryBufferReference> spRef;
+			As<IMemoryBuffer>(spBuffer)->CreateReference(&spRef);
+
+			ComPtr<Windows::Foundation::IMemoryBufferByteAccess> spByteAccess;
+			hr = spRef.As(&spByteAccess);
+			ValidateSuccess(hr, L"Failed to cast buffer");
+			float *pBuffer = nullptr;
+			UINT32 cbBufferLength = 0;
+			hr = spByteAccess->GetBuffer((BYTE **)&pBuffer, &cbBufferLength);
+			ValidateSuccess(hr, L"Failed to get buffer");
+
+			// Test output for silence
+			for (size_t channelIndex = 0; channelIndex < channels; channelIndex++)
+			{
+				float *pOut = pBuffer + channelIndex * fftLength;
+				for (size_t index = 0; index < fftLength; index++)
+				{
+					if (pOut[index] != -100.0f)
+					{
+						wchar_t szMessage[1024];
+						swprintf_s(szMessage, L"FFT output not -100db at index %d channel %d", index,channelIndex);
+						Assert::AreEqual(-100.0f, pBuffer[index], szMessage);
+					}
+				}
+				float *pRMS = pBuffer + channels * fftLength + channelIndex;
+				Assert::AreEqual(-100.0f, *pRMS, L"Invalid RMS value");
+			}
+			
+			As<IClosable>(spRef)->Close();
+			As<IClosable>(spBuffer)->Close();
+		}
+
+
+		void Run_MFT_Test(unsigned sampleRate, unsigned channels,float outputFrameRate)
 		{
 			using namespace ABI::Windows::Media;
 			using namespace ABI::Windows::Foundation;
 
-			REFERENCE_TIME expectedFrameDuration = 166666;
+			const size_t fftLength = 2048;
+			
+			REFERENCE_TIME expectedFrameDuration =  (REFERENCE_TIME) (1e7 / outputFrameRate);
 
 			ComPtr<ABI::SampleGrabber::IMyInterface> spAnalyzerOut;
 			ComPtr<IMFTransform> spTransform;
@@ -273,7 +337,7 @@ namespace AudioProcessingTests
 			ComPtr<CFakeClock> spFakeClock;
 			Create_And_Assign_Clock(&spFakeClock, spTransform.Get());
 
-			HRESULT hr = spAnalyzerOut->Configure(60.0f, 0.5f, 2048);
+			HRESULT hr = spAnalyzerOut->Configure(outputFrameRate, 0.5f, fftLength);
 			hr = spAnalyzerOut->SetLinearFScale();
 
 			const unsigned T1 = 32, T2 = 128;	// Indicates one period length in samples
@@ -289,7 +353,7 @@ namespace AudioProcessingTests
 				g.GetSample(&spInputSample, 16000, 
 					[w1,w2] (unsigned long sampleIndex,unsigned channel)
 					{
-					return channel == 0 ? sinf(w1*sampleIndex) : 0.1f*cosf(w2*sampleIndex);
+					return 0.0f;	// Test silence
 					}
 				);
 				Pump_MFT(spTransform.Get(), spInputSample.Get());
@@ -314,6 +378,9 @@ namespace AudioProcessingTests
 				expectedTimes,
 				expectedFrameDuration);
 
+			size_t expectedOutput = sampleRate / outputFrameRate;
+			Test_Levels(spAnalyzerOut.Get(),fftLength,channels);
+
 			Test_GetFrame_Continuity(spAnalyzerOut.Get(),spFakeClock.Get(),setPresentationTimes[3],expectedFrameDuration);
 
 			// Test_AnalyzerOutput(spAnalyzerOut.Get());
@@ -335,7 +402,7 @@ namespace AudioProcessingTests
 			END_TEST_METHOD_ATTRIBUTE()
 			TEST_METHOD(SampleGrabber_48000_Stereo)
 		{
-			Run_MFT_Test(48000, 2);
+			Run_MFT_Test(48000, 2,60.0f);
 		}
 
 		BEGIN_TEST_METHOD_ATTRIBUTE(SampleGrabber_44100_Stereo)
@@ -343,7 +410,7 @@ namespace AudioProcessingTests
 			END_TEST_METHOD_ATTRIBUTE()
 			TEST_METHOD(SampleGrabber_44100_Stereo)
 		{
-			Run_MFT_Test(44100, 2);
+			Run_MFT_Test(44100, 2,60.0f);
 		}
 
 		/*

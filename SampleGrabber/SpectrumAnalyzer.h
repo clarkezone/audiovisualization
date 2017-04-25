@@ -7,7 +7,9 @@
 #include<DirectXMath.h>
 #include<mfapi.h>
 #include <wrl.h>
+#include <concurrent_queue.h>
 
+// #define COPY_MEDIA_BUFFER
 
 // cubic spline interpolation for 3 discreet consequtive points
 template <class T> class cubic_spline
@@ -98,6 +100,28 @@ template<class T> HRESULT mapToLogScale(const T *pInput, size_t inputSize, T *pO
 
 class CSpectrumAnalyzer
 {
+	struct sample_queue_item
+	{
+	public:
+		Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
+		REFERENCE_TIME time;
+		sample_queue_item()
+		{
+			time = 0;
+		}
+		sample_queue_item(IMFSample *pSample)
+		{
+			pSample->GetSampleTime(&time);
+#ifdef COPY_MEDIA_BUFFER			
+			DWORD cbTotalLength = 0;
+			pSample->GetTotalLength(&cbTotalLength);
+			MFCreateMemoryBuffer(cbTotalLength, &buffer);
+			pSample->CopyToBuffer(buffer.Get());
+#else
+			pSample->ConvertToContiguousBuffer(&buffer);
+#endif
+		}
+	};
 private:
 	unsigned m_AudioChannels;
 	unsigned m_InputSampleRate;
@@ -118,12 +142,17 @@ private:
 	DirectX::XMVECTOR *m_pFftImagUnswizzled;
 	DirectX::XMVECTOR *m_pFftUnityTable;
 
-	bool m_bUseLogScale;
+	bool m_bUseLogFScale;
 	float m_fLogMin;
 	float m_fLogMax;
 	size_t m_logElementsCount;
 
-	std::queue<Microsoft::WRL::ComPtr<IMFSample>> m_InputQueue;
+	bool m_bUseLogAmpScale;
+	DirectX::XMVECTOR m_vClampAmpLow;
+	DirectX::XMVECTOR m_vClampAmpHigh;
+	
+	//std::queue<Microsoft::WRL::ComPtr<IMFSample>> m_InputQueue;
+	concurrency::concurrent_queue<sample_queue_item> m_InputQueue;
 	Microsoft::WRL::Wrappers::CriticalSection m_csQueueLock;
 	Microsoft::WRL::ComPtr<IMFMediaBuffer> m_spCurrentBuffer;
 	REFERENCE_TIME m_hnsCurrentBufferTime;	// Timestamp of current buffer being copied
@@ -189,5 +218,7 @@ public:
 
 	void SetLogFScale(float lowFrequency, float highFrequency, size_t numberOfBins);
 	void SetLinearFScale();
+	void SetLogAmplitudeScale(float clampToLow, float clampToHigh);
+	void SetLinearAmplitudeScale();
 };
 

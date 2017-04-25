@@ -30,8 +30,8 @@ namespace AudioVisualization.Controls.Visualizers
         public Win2DVisualizer()
         {
             // Assume here stereo audio
-            m_VolumeData = new float[2] { -96.0f, -96.0f };
-            m_PeakVolumeData = new float[2] { -96.0f, -96.0f };
+            m_VolumeData = new float[2] { -100.0f, -100.0f };
+            m_PeakVolumeData = new float[2] { -100.0f, -100.0f };
 
             // Assume stereo with 800 data points, 10 times less for peak data
             m_SpectralData = new float[][] { new float[800], new float[800] };
@@ -142,13 +142,6 @@ namespace AudioVisualization.Controls.Visualizers
         const float peakMeterRiseTime = 1.0f;       // Fast rise
         const float peakMeterFallTime = 0.003f;     // Slow fall time
 
-        float VolumeToDb(float vol)
-        {
-            if (vol <= 0.0f)
-                return -96.0f;
-            float db = 20.0f * (float)Math.Log10(vol);
-            return db >= -96.0f ? db : -96.0f;
-        }
         void DrawSwapChain(CanvasSwapChain swapChain)
         {
             using (var ds = swapChain.CreateDrawingSession(Colors.Transparent))
@@ -167,13 +160,14 @@ namespace AudioVisualization.Controls.Visualizers
                     {
                         using (var data = dataFrame.AsVisualizationData())
                         {
-                            DrawVU(ds, VolumeToDb(data[data.Length - 2]), VolumeToDb(data[data.Length - 1]));
+                            DrawVU(ds, data[data.Length - 8], data[data.Length - 7]);
                             DrawSpectrogram(data, ds);
                         }
                     }
                     else
-                    {
-                        DrawVU(ds, -96.0f, -96.0f);
+                    {                        
+                        DrawVU(ds, -100.0f, -100.0f);
+                        DrawSpectrogram(null, ds);
                     }
                     // yuck
                     //lock (PassthroughEffect.GetBadLock())
@@ -238,18 +232,14 @@ namespace AudioVisualization.Controls.Visualizers
 
         private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds)
         {
-            uint elementCount = (data.Length - 2) / 2;
-
-            if (elementCount != 800)
-                return;
-
+            // Spectral data drawn in boxes 200,20 - 1000,220 & 200,240-1000,440
             // Draw grid
             ds.DrawRectangle(200, 20, 800, 200, Colors.Black);
             ds.DrawRectangle(200, 240, 800, 200, Colors.Black);
             for (int db = 0; db >= -80; db -= 20)
             {
                 ds.DrawLine(200.0f, 20.0f - db * 2, 1000.0f, 20.0f - db * 2, Colors.LightGray);
-                ds.DrawLine(200.0f, 432f + db * 2, 1000.0f, 432f + db * 2, Colors.LightGray);
+                ds.DrawLine(200.0f, 440f + db * 2, 1000.0f, 440f + db * 2, Colors.LightGray);
             }
 
             CanvasTextFormat textFormat = new CanvasTextFormat();
@@ -260,20 +250,27 @@ namespace AudioVisualization.Controls.Visualizers
             foreach (float f in new float[] { 20.0f, 32.0f, 50.0f, 75.0f, 100.0f, 150.0f, 200.0f, 320.0f, 500.0f, 750.0f, 1000.0f, 1500.0f, 2000.0f, 3200.0f, 5000.0f, 7500.0f, 10000.0f, 15000.0f, 20000.0f })
             {
                 float x = 200 + 800.0f * (float)Math.Log10(f / 20.0) / 3.0f;
-                ds.DrawLine(x, 20, x, 212, Colors.LightGray);
-                ds.DrawLine(x, 240, x, 432, Colors.LightGray);
+                ds.DrawLine(x, 20, x, 220, Colors.LightGray);
+                ds.DrawLine(x, 240, x, 440, Colors.LightGray);
 
                 string text = f >= 1000.0f ? $"{f / 1000.0}k" : $"{f}";
-                ds.DrawText(text, x, 220, Colors.Black, textFormat);
-                ds.DrawText(text, x, 440, Colors.Black, textFormat);
+                ds.DrawText(text, x, 225, Colors.Black, textFormat);
+                ds.DrawText(text, x, 445, Colors.Black, textFormat);
             }
+
+            if (data == null)
+                return;
+
+            uint elementCount = (data.Length - 8) / 2;
+
+            if (elementCount != 800)
+                return;
 
             for (uint i = 0; i < 800; i++)
             {
                 float xPos = i + 200;
-                // Left channel from top down -96 = 192 0 = 0 +20
                 ds.DrawLine(xPos, 20 - 2 * data[i], xPos, 212, Colors.Orange);
-                ds.DrawLine(xPos, 240, xPos, (240 + 192) + 2 * data[i + elementCount], Colors.Green);
+                ds.DrawLine(xPos, 240, xPos, (240 + 200) + 2 * data[i + elementCount], Colors.Green);
             }
         }
 

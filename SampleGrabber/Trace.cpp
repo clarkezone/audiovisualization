@@ -208,7 +208,7 @@ HRESULT Trace::Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT3
 	return hr;
 }
 
-HRESULT Trace::Log_QueueInput(IMFSample * pSample, HRESULT hResult)
+HRESULT Trace::Log_QueueInput(IMFSample * pSample)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
@@ -224,9 +224,22 @@ HRESULT Trace::Log_QueueInput(IMFSample * pSample, HRESULT hResult)
 	pSample->GetUINT32(MFSampleExtension_Discontinuity, &discontinuity);
 	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { sampleTime });
 	fields->AddTimeSpan(HStringReference(L"Duration").Get(), ABI::Windows::Foundation::TimeSpan() = { duration });
-	fields->AddUInt32(HStringReference(L"SampleFlags").Get(), sampleFlags);
-	fields->AddBoolean(HStringReference(L"Discontinuity").Get(), discontinuity != 0);
-	fields->AddUInt32WithFormat(HStringReference(L"Result").Get(), hResult, LoggingFieldFormat::LoggingFieldFormat_HResult);
+	// Now process buffer
+	DWORD dwBufferCount = 0;
+	pSample->GetBufferCount(&dwBufferCount);
+	std::vector<IMFMediaBuffer *> buffers(dwBufferCount);
+	std::vector<UINT32> lengths(dwBufferCount);
+	for (size_t bufferIndex = 0; bufferIndex < dwBufferCount; bufferIndex++)
+	{
+		IMFMediaBuffer *pBuffer;
+		pSample->GetBufferByIndex(bufferIndex, &pBuffer);
+		DWORD dwBufferLength = 0;
+		pBuffer->GetCurrentLength(&dwBufferLength);
+		buffers[bufferIndex] = pBuffer;
+		lengths[bufferIndex] = dwBufferLength / sizeof(float);
+	}
+	fields->AddUInt32ArrayWithFormat(HStringReference(L"Buffers").Get(), dwBufferCount, (UINT32 *)&*buffers.begin(), LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddUInt32Array(HStringReference(L"BufLen").Get(), dwBufferCount, &*lengths.begin());
 	
 	hr = g_spLogChannel->LogEventWithFields(HStringReference(QI_PUSH).Get(), fields.Get());
 
