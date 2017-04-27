@@ -65,9 +65,6 @@ private:
 	float *m_pWindow;
 	DirectX::XMVECTOR *m_pFftReal;
 	DirectX::XMVECTOR *m_pFftBuffers;	// Vector buffer which is 3 times m_FFTLength
-	/*DirectX::XMVECTOR *m_pFftImag;
-	DirectX::XMVECTOR *m_pFftRealUnswizzled;
-	DirectX::XMVECTOR *m_pFftImagUnswizzled;*/
 	DirectX::XMVECTOR *m_pFftUnityTable;
 
 	bool m_bUseLogFScale;
@@ -83,7 +80,8 @@ private:
 	void FreeBuffers();
 	void CalculateFft(DirectX::XMVECTOR *pInput, DirectX::XMVECTOR *pOutput, float *pRms,DirectX::XMVECTOR *pBuffers);	/// Performs FFT on pInput real values and stores results in pOutput. Total RMS values will be stored in pRms
 	HRESULT GetRingBufferData(float *pData,_Outptr_ REFERENCE_TIME *pTimeStamp);	// Deinterleaves and windows data from the ring buffer
-
+	void ConverToDb(DirectX::XMVECTOR *pData, size_t vSize);
+	HRESULT CreateOutputSample(IMFSample **pSample, IMFMediaBuffer *pBuffer, size_t dataLength, REFERENCE_TIME time, REFERENCE_TIME duration);
 	Microsoft::WRL::Wrappers::CriticalSection m_csConfigAccess;
 public:
 	CSpectrumAnalyzer();

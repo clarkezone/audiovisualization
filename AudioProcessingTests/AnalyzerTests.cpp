@@ -216,7 +216,7 @@ namespace AudioProcessingTests
 				ComPtr<IAudioFrame> spOutFrame;
 				HRESULT hr = pAnalyzer->GetFrame(&spOutFrame);
 				ValidateSuccess(hr, L"Unable to get frame");
-				Assert::IsTrue(spOutFrame != nullptr, L"Analyzer out frame is nullptr",LINE_INFO());
+				Assert::IsTrue(spOutFrame != nullptr, L"Analyzer out frame is nullptr", LINE_INFO());
 				ComPtr<IMediaFrame> spMediaFrame;
 				hr = spOutFrame.As(&spMediaFrame);
 				ValidateSuccess(hr, L"Unable to cast to IMediaFrame");
@@ -233,8 +233,8 @@ namespace AudioProcessingTests
 				frameDuration->get_Value(&tsDuration);
 				frameTime->get_Value(&tsTime);
 
-				Assert::AreEqual(expectedDuration, tsDuration.Duration, L"Incorrect duration",LINE_INFO());
-				Assert::AreEqual(pFrameTimes[testIndex], tsTime.Duration, L"Incorrect time",LINE_INFO());
+				Assert::AreEqual(expectedDuration, tsDuration.Duration, L"Incorrect duration", LINE_INFO());
+				Assert::AreEqual(pFrameTimes[testIndex], tsTime.Duration, L"Incorrect time", LINE_INFO());
 			}
 
 		}
@@ -333,24 +333,24 @@ namespace AudioProcessingTests
 				Assert::AreEqual(-100.0f, *pRMS, L"Invalid RMS value");
 			}
 		}
-		void Test_LogFOutput(IMFTransform *pMft, ABI::SampleGrabber::IMyInterface *pAnalyzer, CFakeClock *pClock,float outputFrameRate,size_t sampleRate, size_t channels)
+		void Test_LogFOutput(IMFTransform *pMft, ABI::SampleGrabber::IMyInterface *pAnalyzer, CFakeClock *pClock, float outputFrameRate, size_t sampleRate, size_t channels)
 		{
 			size_t outputSize = 1000;
 			using namespace ABI::Windows::Media;
 			pAnalyzer->SetLogFScale(20.0f, 20000.0f, outputSize);
-			
+
 
 			// Generate two signals - one at 100Hz and the other at 1000Hz multiplied by 1.5 for each channel
 			// With amplitude of  1 1/4 1/16 etc.
-			std::vector<float> w1(channels),w2(channels),f1(channels),f2(channels);
-			std::vector<float> a(channels),db(channels);
+			std::vector<float> w1(channels), w2(channels), f1(channels), f2(channels);
+			std::vector<float> a(channels), db(channels);
 			float base_f1 = 100.0f, base_f2 = 1000.0f;
 			float base_amp = 1.0;
 			const float pi = 3.14159f;
-			for (size_t channelIndex = 0; channelIndex < channels; channelIndex++,base_f1*=1.5f,base_f2*=1.5,base_amp*=0.25)
+			for (size_t channelIndex = 0; channelIndex < channels; channelIndex++, base_f1 *= 1.5f, base_f2 *= 1.5, base_amp *= 0.25)
 			{
-				w1[channelIndex] = 2.0f*pi*base_f1 / (float) sampleRate;
-				w2[channelIndex] = 2.0f*pi*base_f2 / (float) sampleRate;
+				w1[channelIndex] = 2.0f*pi*base_f1 / (float)sampleRate;
+				w2[channelIndex] = 2.0f*pi*base_f2 / (float)sampleRate;
 				a[channelIndex] = base_amp;
 				f1[channelIndex] = base_f1;
 				f2[channelIndex] = base_f2;
@@ -377,10 +377,10 @@ namespace AudioProcessingTests
 			Sleep(300);	// Sleep for 300ms to allow processing
 
 			// Now simulate the operation
-			REFERENCE_TIME clockStep = (1e7/ outputFrameRate);
+			REFERENCE_TIME clockStep = (1e7 / outputFrameRate);
 			REFERENCE_TIME clock = 1200 + clockStep;	// Some offset
 
-			for (size_t iteration = 0; iteration < 120; iteration++,clock += clockStep)
+			for (size_t iteration = 0; iteration < 120; iteration++, clock += clockStep)
 			{
 				pClock->SetTime(clock);
 
@@ -417,7 +417,7 @@ namespace AudioProcessingTests
 					size_t trough_index = 0;
 					float fStep = powf(1000.0f, 1 / 1000.0f);
 					float f = 20.0f * fStep * fStep;
-					for (size_t index = 2; index < outputSize; index++,f*=fStep)
+					for (size_t index = 2; index < outputSize; index++, f *= fStep)
 					{
 						float delta1 = pData[index - 1] - pData[index - 2];
 						float delta2 = pData[index] - pData[index - 1];
@@ -443,26 +443,23 @@ namespace AudioProcessingTests
 							trough_value = pData[index - 1];
 						}
 					}
-					if (peaks.size() == 2)	// Skip first iterations
-					{
-						Assert::AreEqual(peaks.size(), 2u, L"Expecting 2 peaks", LINE_INFO());
-						Peak p1 = peaks.front(),p2 = peaks.back();
-						// The higher tone should be about 6db (0.5 times) stronger than lower one
-						Assert::AreEqual(6.0f, p2.value - p1.value, 1.0f, L"Expect 6db off", LINE_INFO());
 
-						wchar_t szMessage[1024];
-						swprintf_s(szMessage, L"Peak check iteration %d, channel %d, p1=(%fHz %fdb) p2=(%fHz %fdb)\n", iteration, channelIndex, p1.frequency, p1.value, p2.frequency, p2.value);
-						OutputDebugString(szMessage);
-						float expectedValue = db[channelIndex] - 14.0f;
-						// 1.0db tolerance for volume
-						Assert::AreEqual(expectedValue - 6.0f, p1.value, 1.0f, szMessage, LINE_INFO());
-						Assert::AreEqual(expectedValue, p2.value, 1.0f, szMessage, LINE_INFO());
+					Assert::AreEqual(peaks.size(), 2u, L"Expecting 2 peaks", LINE_INFO());
+					Peak p1 = peaks.front(), p2 = peaks.back();
+					// The higher tone should be about 6db (0.5 times) stronger than lower one
+					Assert::AreEqual(6.0f, p2.value - p1.value, 1.0f, L"Expect 6db off", LINE_INFO());
 
-						// 10% tolerance for frequency
-						Assert::AreEqual(f1[channelIndex],p1.frequency,p1.frequency*0.1f,szMessage,LINE_INFO());
-						Assert::AreEqual(f2[channelIndex], p2.frequency, p2.frequency*0.1f, szMessage, LINE_INFO());
+					wchar_t szMessage[1024];
+					swprintf_s(szMessage, L"Peak check iteration %d, channel %d, p1=(%fHz %fdb) p2=(%fHz %fdb)\n", iteration, channelIndex, p1.frequency, p1.value, p2.frequency, p2.value);
+					OutputDebugString(szMessage);
+					float expectedValue = db[channelIndex] - 14.0f;
+					// 1.0db tolerance for volume
+					Assert::AreEqual(expectedValue - 6.0f, p1.value, 1.0f, szMessage, LINE_INFO());
+					Assert::AreEqual(expectedValue, p2.value, 1.0f, szMessage, LINE_INFO());
 
-					}
+					// 10% tolerance for frequency
+					Assert::AreEqual(f1[channelIndex], p1.frequency, p1.frequency*0.1f, szMessage, LINE_INFO());
+					Assert::AreEqual(f2[channelIndex], p2.frequency, p2.frequency*0.1f, szMessage, LINE_INFO());
 
 				}
 
@@ -539,7 +536,7 @@ namespace AudioProcessingTests
 			spAnalyzerOut->GetFrame(&spFrame);
 			Assert::IsNull(spFrame.Get(), L"Frame not null");
 
-			Test_LogFOutput(spTransform.Get(), spAnalyzerOut.Get(),spFakeClock.Get(), outputFrameRate, sampleRate, channels);
+			Test_LogFOutput(spTransform.Get(), spAnalyzerOut.Get(), spFakeClock.Get(), outputFrameRate, sampleRate, channels);
 
 		}
 	public:
@@ -731,7 +728,7 @@ namespace AudioProcessingTests
 			input[10] = 0.2f;
 			// Convert to 20 bins of logarithmic distribution from 20...20000Hz
 			std::vector<float> output(20);
-			AudioProcessing::mapToLogScale(&input[0],256, &output[0],20, 20.f/24000.f, 20000.f/24000.f);
+			AudioProcessing::mapToLogScale(&input[0], 256, &output[0], 20, 20.f / 24000.f, 20000.f / 24000.f);
 
 			float expected[] = {
 				0.138372749f,0.211934686f,0.329434842f,0.517418683f,

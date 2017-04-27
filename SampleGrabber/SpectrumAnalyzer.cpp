@@ -256,6 +256,34 @@ HRESULT CSpectrumAnalyzer::GetRingBufferData(float *pData,REFERENCE_TIME *pTimeS
 
 	return S_OK;
 }
+void CSpectrumAnalyzer::ConverToDb(DirectX::XMVECTOR * pvData, size_t vSize)
+{
+	using namespace DirectX;
+	for (size_t vIndex = 0; vIndex < m_AudioChannels * vSize + 2; vIndex++)
+	{
+		XMVECTOR vClamped = XMVectorClamp(pvData[vIndex], DirectX::g_XMZero, XMVectorReplicate(std::numeric_limits<float>::max()));
+		XMVECTOR vLog = XMVectorLogE(vClamped) * g_vLog10DbScaler;
+		pvData[vIndex] = XMVectorClamp(vLog, m_vClampAmpLow, m_vClampAmpHigh);
+	}
+
+}
+
+HRESULT CSpectrumAnalyzer::CreateOutputSample(IMFSample ** pSample, IMFMediaBuffer * pBuffer, size_t outputBufferStep, REFERENCE_TIME time, REFERENCE_TIME duration)
+{
+	HRESULT hr = MFCreateSample(pSample);
+	if (FAILED(hr))
+		return hr;
+
+	(*pSample)->AddBuffer(pBuffer);
+	(*pSample)->SetSampleTime(time);
+	(*pSample)->SetSampleDuration(duration);
+
+	// Append the channel buffer length as a property
+	(*pSample)->SetUINT32(g_PropBufferStep, outputBufferStep);
+
+	return S_OK;
+}
+
 HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 {
 	using namespace DirectX;
@@ -272,50 +300,36 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 	// Create output media sample
 	ComPtr<IMFMediaBuffer> spBuffer;
 
-	size_t outputLength = m_bUseLogFScale ? m_logElementsCount : m_FFTLength;
-
 	// Create aligned buffer for vector math + 16 bytes for 8 floats for RMS values
-	// To use vector math allocate buffer for each channel which is rounded up to the next 16 byte boundary
-	size_t vOutputLength = (outputLength + 3) >> 2;
+	size_t outputLength = m_bUseLogFScale ? m_logElementsCount : m_FFTLength;
+	size_t vOutputLength = (outputLength + 3) >> 2;		// To use vector math allocate buffer for each channel which is rounded up to the next 16 byte boundary
 	HRESULT hr = MFCreateAlignedMemoryBuffer((sizeof(XMVECTOR)*vOutputLength*m_AudioChannels) + 2 * sizeof(XMVECTOR), 16, &spBuffer);
 	if (FAILED(hr))
 		return hr;
 
 	spBuffer->SetCurrentLength(sizeof(XMVECTOR)*(2 + m_AudioChannels * vOutputLength));
-
-	ComPtr<IMFSample> spSample;
-	hr = MFCreateSample(&spSample);
+	float *pBufferData;
+	hr = spBuffer->Lock((BYTE **)&pBufferData, nullptr, nullptr);
 	if (FAILED(hr))
 		return hr;
 
-	spSample->AddBuffer(spBuffer.Get());
-	spSample->SetSampleDuration((long long)10000000L * m_StepFrameCount / m_InputSampleRate);
-	spSample->SetSampleTime(hnsDataTime);
+	float fromFreq = 2 * m_fLogMin / m_InputSampleRate;
+	float toFreq = 2 * m_fLogMax / m_InputSampleRate;
 
-	// Append the channel buffer length as a property
-	spSample->SetUINT32(g_PropBufferStep, vOutputLength << 2);
-
-	float *pData;
-	hr = spBuffer->Lock((BYTE **)&pData, nullptr, nullptr);
-	if (FAILED(hr))
-		return hr;
-
-	float *pRMSData = (float *)(pData + m_AudioChannels * (vOutputLength << 2));
-	*((XMVECTOR *)pRMSData) = DirectX::g_XMZero;	// Zero RMS values as vector value
+	float *pRMSData = (float *)(pBufferData + m_AudioChannels * (vOutputLength << 2));
+	memset(pRMSData, 0, sizeof(float) * 8);	// Zero the 8 RMS value slots
 
 	// Process each channel now. FFT values are in the m_pFftReal
 	for (size_t channelIndex = 0; channelIndex < m_AudioChannels; channelIndex++)
 	{
 		// Output data goes directly into the allocated buffer
 		// One channel output is fftLength / 2, array vector size is fftLength / 4 hence fftLength >> 3
-		float *pOutData = pData + channelIndex * (vOutputLength << 2);
+		float *pOutData = pBufferData + channelIndex * (vOutputLength << 2);
 
 		DirectX::XMVECTOR *pFftData = m_pFftReal + channelIndex * (m_FFTLength >> 2);
 		if (m_bUseLogFScale)
 		{
 			CalculateFft(pFftData, pFftData, pRMSData + channelIndex, m_pFftBuffers);
-			float fromFreq = 2 * m_fLogMin / m_InputSampleRate;
-			float toFreq = 2 * m_fLogMax / m_InputSampleRate;
 			mapToLogScale((float *)pFftData, m_FFTLength >> 1, pOutData, m_logElementsCount, fromFreq, toFreq);
 		}
 		else
@@ -326,21 +340,15 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 	// Scale the output value, we can use vector math as there is space after the buffer and it is aligned
 	if (m_bUseLogAmpScale)
 	{
-
-		XMVECTOR *pvData = (XMVECTOR *)pData;
 		// Process all amplitude and RMS values in one pass
-		for (size_t vIndex = 0; vIndex < m_AudioChannels * vOutputLength + 2; vIndex++)
-		{
-			XMVECTOR vClamped = XMVectorClamp(pvData[vIndex], DirectX::g_XMZero, XMVectorReplicate(std::numeric_limits<float>::max()));
-			XMVECTOR vLog = XMVectorLogE(vClamped) * g_vLog10DbScaler;
-			pvData[vIndex] = XMVectorClamp(vLog, m_vClampAmpLow, m_vClampAmpHigh);
-		}
+		ConverToDb((XMVECTOR *)pBufferData, vOutputLength);
 	}
 
 	spBuffer->Unlock();
 
-	spSample.CopyTo(ppSample);
-	return S_OK;
+	hr = CreateOutputSample(ppSample, spBuffer.Get(), vOutputLength << 2, hnsDataTime, (long long)10000000L * m_StepFrameCount / m_InputSampleRate);
+
+	return hr;
 }
 
 void CSpectrumAnalyzer::Reset()
