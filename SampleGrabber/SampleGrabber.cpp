@@ -106,7 +106,7 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	}
 
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
-	Trace::Log_StartGetFrame(&logActivity, currentPosition,m_AnalyzerOutput.size());
+	Trace::Log_StartGetFrame(&logActivity, currentPosition,m_AnalyzerOutput.unsafe_size());
 	CLogActivityHelper activity(logActivity.Get());
 
 	if (currentPosition == -1)
@@ -123,39 +123,31 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 
 	while (!m_AnalyzerOutput.empty())
 	{
+		auto item = m_AnalyzerOutput.unsafe_begin();
 		REFERENCE_TIME sampleTime = 0, sampleDuration = 0;
-		hr = m_AnalyzerOutput.front()->GetSampleTime(&sampleTime);
+		hr = item->sample->GetSampleTime(&sampleTime);
 		if (FAILED(hr))
 			return hr;
-		hr = m_AnalyzerOutput.front()->GetSampleDuration(&sampleDuration);
+		hr = item->sample->GetSampleDuration(&sampleDuration);
 		if (FAILED(hr))
 			return hr;
+		REFERENCE_TIME nextTime = sampleTime + sampleDuration;
+		item++;
+		if (item != m_AnalyzerOutput.unsafe_end())
+			item->sample->GetSampleTime(&nextTime);
 
-		long frameOffset = ((48000u * sampleTime + 5000000) / 10000000L);
-		if (m_ExpectedFrameOffset != -1 && m_ExpectedFrameOffset != frameOffset)
-		{
-			Trace::Log_OutputQueueDiscontinuity(10000000 * (long long) frameOffset / m_InputSampleRate , 
-				10000000 * (long long) m_ExpectedFrameOffset / m_InputSampleRate);
-		}
-
-		Trace::Log_TestFrame(currentPosition,sampleTime, sampleDuration);
-		if (currentPosition >= sampleTime && currentPosition < sampleTime + sampleDuration)
+		if (currentPosition >= sampleTime && currentPosition < nextTime)
 		{
 			Trace::Log_FrameFound(sampleTime, sampleDuration);
-			m_AnalyzerOutput.front().CopyTo(&spSample);
+			spSample = m_AnalyzerOutput.unsafe_begin()->sample;
 			break;
 		}
 		else
 		{
-			if (m_ExpectedFrameOffset == -1 || m_ExpectedFrameOffset == frameOffset)
-			{
-				m_AnalyzerOutput.pop();
-				Trace::Log_OutputQueuePop(sampleTime, sampleDuration, m_AnalyzerOutput.size());
-			}
+			sample_queue_item item;
+			m_AnalyzerOutput.try_pop(item);
 		}
-		m_ExpectedFrameOffset = frameOffset;
 	}
-
 	// Position not found in the queue
 	if (spSample == nullptr)
 	{
@@ -1043,7 +1035,7 @@ HRESULT CSampleGrabber::ProcessOutput(
 #pragma region MyRegion
 
 	// Queue the audio frame in the analyzer buffer
-	hr = m_Analyzer.QueueInput(m_pSample.Get());
+	hr = m_Analyzer.AppendInput(m_pSample.Get());
 	BeginAnalysis();
 
 	//TODO: move this into the 
@@ -1168,7 +1160,9 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 		Trace::Log_StartOutputQueuePush(&spPushActivity,timestamp);
 		CLogActivityHelper pushActivity(spPushActivity.Get());
 		auto lock =  m_csOutputQueueAccess.Lock();
-		m_AnalyzerOutput.push(spSample);
+		sample_queue_item item;
+		item.sample = spSample;
+		m_AnalyzerOutput.push(item);
 	}
 	else
 	{

@@ -163,6 +163,7 @@ namespace AudioVisualization.Controls.Visualizers
                             DrawVU(ds, data[data.Length - 8], data[data.Length - 7]);
                             DrawSpectrogram(data, ds);
                         }
+                        dataFrame.Dispose();
                     }
                     else
                     {                        

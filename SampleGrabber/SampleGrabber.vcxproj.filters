@@ -24,6 +24,8 @@
     <ClInclude Include="SampleGrabber_h.h" />
     <ClInclude Include="AsyncCallback.h" />
     <ClInclude Include="SpectrumAnalyzer.h" />
+    <ClInclude Include="cubic_spline.h" />
+    <ClInclude Include="ring_buffer.h" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="SampleGrabber.idl" />

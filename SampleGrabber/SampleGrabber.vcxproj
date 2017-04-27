@@ -218,9 +218,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AsyncCallback.h" />
+    <ClInclude Include="cubic_spline.h" />
     <ClInclude Include="DirectXMath.h" />
     <ClInclude Include="MFHelpers.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ring_buffer.h" />
     <ClInclude Include="SampleGrabber.h" />
     <ClInclude Include="SampleGrabber_h.h" />
     <ClInclude Include="SpectrumAnalyzer.h" />

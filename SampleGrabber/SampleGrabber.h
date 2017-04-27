@@ -29,6 +29,12 @@ class CSampleGrabber
 	ABI::Windows::Media::IMediaExtension, ABI::SampleGrabber::IMyInterface,
 	IMFTransform,IMFClockConsumer >
 {
+	struct sample_queue_item
+	{
+	public:
+		Microsoft::WRL::ComPtr<IMFSample> sample;
+	};
+
 	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)
 
 public:
@@ -259,7 +265,8 @@ private:
 	CSpectrumAnalyzer			m_Analyzer;
 
 	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
-	std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
+	//std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
+	concurrency::concurrent_queue<sample_queue_item> m_AnalyzerOutput;
 	long m_ExpectedFrameOffset;
 	HANDLE m_hWQAccess;	
 	AsyncCallback<CSampleGrabber> m_AnalysisCompleteCallback;

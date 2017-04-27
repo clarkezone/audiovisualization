@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "CppUnitTest.h"
 #include"..\AudioProcessing\SpectrumAnalyzer.h"
+#include"..\SampleGrabber\cubic_spline.h"
+#include"..\SampleGrabber\ring_buffer.h"
 #include"..\SampleGrabber\SampleGrabber_h.h"
 #include "MFHelpers.h"
 #include <algorithm>
@@ -12,7 +14,7 @@
 #include "SignalGenerator.h"
 #include <windows.foundation.h>
 #include <MemoryBuffer.h>
-
+#include <concurrent_queue.h>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace Microsoft::WRL;
@@ -47,6 +49,41 @@ namespace AudioProcessingTests
 		return spT;
 	}
 
+	class CAudioBufferHelper
+	{
+		Microsoft::WRL::ComPtr<ABI::Windows::Media::IAudioBuffer> m_spBuffer;
+		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::IMemoryBufferReference> m_spRef;
+		float *m_pData;
+		UINT32 m_Length;
+	public:
+		UINT32 GetLength() { return m_Length; }
+		float *GetBuffer() { return m_pData; }
+		CAudioBufferHelper(ABI::Windows::Media::IAudioFrame *pFrame, ABI::Windows::Media::AudioBufferAccessMode mode = ABI::Windows::Media::AudioBufferAccessMode::AudioBufferAccessMode_Read)
+		{
+			using namespace ABI::Windows::Foundation;
+			HRESULT hr = pFrame->LockBuffer(mode, &m_spBuffer);
+			Assert::IsTrue(hr == S_OK, L"LockBuffer", LINE_INFO());
+			hr = m_spBuffer->get_Length(&m_Length);
+			Assert::IsTrue(hr == S_OK, L"GetLength", LINE_INFO());
+
+			As<IMemoryBuffer>(m_spBuffer)->CreateReference(&m_spRef);
+
+			ComPtr<Windows::Foundation::IMemoryBufferByteAccess> spByteAccess;
+			hr = m_spRef.As(&spByteAccess);
+			Assert::IsTrue(hr == S_OK, L"AsByteAccess", LINE_INFO());
+
+			UINT32 cbBufferLength = 0;
+			hr = spByteAccess->GetBuffer((BYTE **)&m_pData, &cbBufferLength);
+			Assert::IsTrue(hr == S_OK, L"GetBuffer", LINE_INFO());
+		}
+		~CAudioBufferHelper()
+		{
+			using namespace ABI::Windows::Foundation;
+			As<IClosable>(m_spRef)->Close();
+			As<IClosable>(m_spBuffer)->Close();
+		}
+	};
+
 	TEST_CLASS(AnalyzerTests)
 	{
 	private:
@@ -61,10 +98,10 @@ namespace AudioProcessingTests
 		}
 
 		HRESULT CreateSignal(IMFSample **ppSample,
-								size_t sampleRate,
-								size_t sampleCount, 
-								size_t sampleOffset, 
-								vector<std::function<float (int)>> generators)
+			size_t sampleRate,
+			size_t sampleCount,
+			size_t sampleOffset,
+			vector<std::function<float(int)>> generators)
 		{
 			ComPtr<IMFSample> sample;
 			HRESULT hr = MFCreateSample(&sample);
@@ -94,7 +131,7 @@ namespace AudioProcessingTests
 			return hr;
 		}
 
-		void Create_SampleGrabber_MFT(IMFTransform **ppMFTObject,ABI::SampleGrabber::IMyInterface **ppMyInterface)
+		void Create_SampleGrabber_MFT(IMFTransform **ppMFTObject, ABI::SampleGrabber::IMyInterface **ppMyInterface)
 		{
 			ComPtr<IActivationFactory> mftFactory;
 			HRESULT hr = ABI::Windows::Foundation::GetActivationFactory(HStringReference(RuntimeClass_SampleGrabber_SampleGrabberTransform).Get(), &mftFactory);
@@ -116,7 +153,7 @@ namespace AudioProcessingTests
 			spAnalyzerOut.CopyTo(ppMyInterface);
 		}
 
-		void Configure_MediaType_MFT(IMFTransform *pMFT, unsigned sampleRate,unsigned channels)
+		void Configure_MediaType_MFT(IMFTransform *pMFT, unsigned sampleRate, unsigned channels)
 		{
 			ComPtr<IMFMediaType> spMediaType;
 			CreateFloat32AudioType(sampleRate, 32, channels, &spMediaType);
@@ -128,7 +165,7 @@ namespace AudioProcessingTests
 			ValidateSuccess(hr, L"Failed to set output type");
 		}
 		void GetFrame_Before_Configure(ABI::SampleGrabber::IMyInterface *pAnalyzer)
-		{		
+		{
 			ComPtr<ABI::Windows::Media::IAudioFrame> spNullAudioFrame;
 			HRESULT hr = pAnalyzer->GetFrame(&spNullAudioFrame);
 			ValidateSuccess(hr, L"Call to getframe before adding data");
@@ -147,7 +184,7 @@ namespace AudioProcessingTests
 			hr = spClockConsumer->SetPresentationClock(spFakeClock.Get());
 			ValidateSuccess(hr, L"Failed to set clock");
 		}
-		void Pump_MFT(IMFTransform *pMFT,IMFSample *pInputSample)
+		void Pump_MFT(IMFTransform *pMFT, IMFSample *pInputSample)
 		{
 			HRESULT hr = pMFT->ProcessInput(0, pInputSample, 0);
 			ValidateSuccess(hr, L"ProcessInput failed");
@@ -166,7 +203,7 @@ namespace AudioProcessingTests
 				outData.pSample->Release();
 			}
 		}
-		void Test_GetFrame_Timings(ABI::SampleGrabber::IMyInterface *pAnalyzer,CFakeClock *pClock,size_t testCount, REFERENCE_TIME *pClockTimes, REFERENCE_TIME *pFrameTimes,REFERENCE_TIME expectedDuration)
+		void Test_GetFrame_Timings(ABI::SampleGrabber::IMyInterface *pAnalyzer, CFakeClock *pClock, size_t testCount, REFERENCE_TIME *pClockTimes, REFERENCE_TIME *pFrameTimes, REFERENCE_TIME expectedDuration)
 		{
 			using namespace ABI::Windows::Media;
 			using namespace ABI::Windows::Foundation;
@@ -179,7 +216,7 @@ namespace AudioProcessingTests
 				ComPtr<IAudioFrame> spOutFrame;
 				HRESULT hr = pAnalyzer->GetFrame(&spOutFrame);
 				ValidateSuccess(hr, L"Unable to get frame");
-				Assert::IsTrue(spOutFrame != nullptr, L"Analyzer out frame is nullptr");
+				Assert::IsTrue(spOutFrame != nullptr, L"Analyzer out frame is nullptr",LINE_INFO());
 				ComPtr<IMediaFrame> spMediaFrame;
 				hr = spOutFrame.As(&spMediaFrame);
 				ValidateSuccess(hr, L"Unable to cast to IMediaFrame");
@@ -196,8 +233,8 @@ namespace AudioProcessingTests
 				frameDuration->get_Value(&tsDuration);
 				frameTime->get_Value(&tsTime);
 
-				Assert::AreEqual(expectedDuration, tsDuration.Duration, L"Incorrect duration");
-				Assert::AreEqual(pFrameTimes[testIndex], tsTime.Duration,  L"Incorrect time");			
+				Assert::AreEqual(expectedDuration, tsDuration.Duration, L"Incorrect duration",LINE_INFO());
+				Assert::AreEqual(pFrameTimes[testIndex], tsTime.Duration, L"Incorrect time",LINE_INFO());
 			}
 
 		}
@@ -235,19 +272,19 @@ namespace AudioProcessingTests
 					// Do the math in number of frames to avoid int math rounding errors
 					// Does not matter what the frame rate is really so use 48k
 					// This is effectively round with precision 1/48000
-					unsigned numberOfFrames = (unsigned) ((48000u * duration.Duration + 5000000) / 10000000L);
-					unsigned frameOffset = (unsigned) ((48000u * time.Duration + 5000000) / 10000000L);
+					unsigned numberOfFrames = (unsigned)((48000u * duration.Duration + 5000000) / 10000000L);
+					unsigned frameOffset = (unsigned)((48000u * time.Duration + 5000000) / 10000000L);
 
 					if (computedFrameOffset != -1)
 					{
-						Assert::AreEqual(frameOffset, (unsigned) computedFrameOffset, L"Discontinuity in frames");
+						Assert::AreEqual(frameOffset, (unsigned)computedFrameOffset, L"Discontinuity in frames");
 					}
 					computedFrameOffset = frameOffset + numberOfFrames;
 				}
 				time += step;
 			} while (spFrame != nullptr);
 
-			return 10000000L * (long long) computedFrameOffset / 48000L;
+			return 10000000L * (long long)computedFrameOffset / 48000L;
 		}
 
 		// Test the output of the analyzer
@@ -264,7 +301,7 @@ namespace AudioProcessingTests
 			ValidateSuccess(hr, L"Failed to get audio buffer");
 		}
 
-		void Test_Levels(ABI::SampleGrabber::IMyInterface *pAnalyzer,size_t fftLength,size_t channels)
+		void Test_Zero_Levels(ABI::SampleGrabber::IMyInterface *pAnalyzer, size_t fftLength, size_t channels)
 		{
 			using namespace ABI::Windows::Media;
 			using namespace ABI::Windows::Foundation;
@@ -272,27 +309,12 @@ namespace AudioProcessingTests
 			HRESULT hr = pAnalyzer->GetFrame(&spFrame);
 			ValidateSuccess(hr, L"Failed to get audio frame");
 
-			ComPtr<IAudioBuffer> spBuffer;
-			hr = spFrame->LockBuffer(AudioBufferAccessMode::AudioBufferAccessMode_Read, &spBuffer);
-
-			ValidateSuccess(hr, L"Failed to get audio buffer");
-			UINT32 length;
-			hr = spBuffer->get_Length(&length);
-			ValidateSuccess(hr, L"Failed to get audio buffer");
+			CAudioBufferHelper b(spFrame.Get());
+			UINT32 length = b.GetLength();
 			UINT32 expectedLength = (fftLength * channels) + 8;
-			Assert::AreEqual(expectedLength * sizeof(float), length,L"Unexpected buffer length",LINE_INFO());
+			Assert::AreEqual(expectedLength * sizeof(float), length, L"Unexpected buffer length", LINE_INFO());
 
-		
-			ComPtr<IMemoryBufferReference> spRef;
-			As<IMemoryBuffer>(spBuffer)->CreateReference(&spRef);
-
-			ComPtr<Windows::Foundation::IMemoryBufferByteAccess> spByteAccess;
-			hr = spRef.As(&spByteAccess);
-			ValidateSuccess(hr, L"Failed to cast buffer");
-			float *pBuffer = nullptr;
-			UINT32 cbBufferLength = 0;
-			hr = spByteAccess->GetBuffer((BYTE **)&pBuffer, &cbBufferLength);
-			ValidateSuccess(hr, L"Failed to get buffer");
+			float *pBuffer = b.GetBuffer();
 
 			// Test output for silence
 			for (size_t channelIndex = 0; channelIndex < channels; channelIndex++)
@@ -303,27 +325,159 @@ namespace AudioProcessingTests
 					if (pOut[index] != -100.0f)
 					{
 						wchar_t szMessage[1024];
-						swprintf_s(szMessage, L"FFT output not -100db at index %d channel %d", index,channelIndex);
+						swprintf_s(szMessage, L"FFT output not -100db at index %d channel %d", index, channelIndex);
 						Assert::AreEqual(-100.0f, pBuffer[index], szMessage);
 					}
 				}
 				float *pRMS = pBuffer + channels * fftLength + channelIndex;
 				Assert::AreEqual(-100.0f, *pRMS, L"Invalid RMS value");
 			}
+		}
+		void Test_LogFOutput(IMFTransform *pMft, ABI::SampleGrabber::IMyInterface *pAnalyzer, CFakeClock *pClock,float outputFrameRate,size_t sampleRate, size_t channels)
+		{
+			size_t outputSize = 1000;
+			using namespace ABI::Windows::Media;
+			pAnalyzer->SetLogFScale(20.0f, 20000.0f, outputSize);
 			
-			As<IClosable>(spRef)->Close();
-			As<IClosable>(spBuffer)->Close();
+
+			// Generate two signals - one at 100Hz and the other at 1000Hz multiplied by 1.5 for each channel
+			// With amplitude of  1 1/4 1/16 etc.
+			std::vector<float> w1(channels),w2(channels),f1(channels),f2(channels);
+			std::vector<float> a(channels),db(channels);
+			float base_f1 = 100.0f, base_f2 = 1000.0f;
+			float base_amp = 1.0;
+			const float pi = 3.14159f;
+			for (size_t channelIndex = 0; channelIndex < channels; channelIndex++,base_f1*=1.5f,base_f2*=1.5,base_amp*=0.25)
+			{
+				w1[channelIndex] = 2.0f*pi*base_f1 / (float) sampleRate;
+				w2[channelIndex] = 2.0f*pi*base_f2 / (float) sampleRate;
+				a[channelIndex] = base_amp;
+				f1[channelIndex] = base_f1;
+				f2[channelIndex] = base_f2;
+				db[channelIndex] = 20.0f * log10f(base_amp);
+			}
+			CGenerator g(sampleRate, channels);
+
+			const size_t iterationSampleCount = 16000;
+			const size_t preRollIterations = 6;
+
+			for (size_t iterations = 0; iterations < preRollIterations; iterations++)
+			{
+				ComPtr<IMFSample> spInputSample;
+				g.GetSample(&spInputSample, iterationSampleCount,
+					[w1, w2, a](unsigned long sampleIndex, unsigned channel)
+				{
+					return 0.5f*a[channel] * sinf(w1[channel] * sampleIndex) + a[channel] * sinf(w2[channel] * sampleIndex);
+				}
+				);
+				Pump_MFT(pMft, spInputSample.Get());
+			}
+
+			// Allow for background processing
+			Sleep(300);	// Sleep for 300ms to allow processing
+
+			// Now simulate the operation
+			REFERENCE_TIME clockStep = (1e7/ outputFrameRate);
+			REFERENCE_TIME clock = 1200 + clockStep;	// Some offset
+
+			for (size_t iteration = 0; iteration < 120; iteration++,clock += clockStep)
+			{
+				pClock->SetTime(clock);
+
+				ComPtr<IAudioFrame> spFrame;
+				HRESULT hr = pAnalyzer->GetFrame(&spFrame);
+				Assert::IsTrue(hr == S_OK, L"AsByteAccess", LINE_INFO());
+				Assert::IsNotNull(spFrame.Get(), L"Frame null", LINE_INFO());
+				CAudioBufferHelper buffer(spFrame.Get());
+
+				// Find peaks
+				std::vector<size_t> peak_index(channels);
+				std::vector<float> peak_value(channels);
+				float *pBufferData = buffer.GetBuffer();
+				size_t bufferSize = buffer.GetLength();
+
+				Assert::AreEqual(sizeof(float) * (outputSize * channels + 8), bufferSize, L"BufferSize", LINE_INFO());
+				struct Peak
+				{
+				public:
+					size_t index;
+					float frequency;
+					float value;
+					float prominence;
+				};
+
+				for (size_t channelIndex = 0; channelIndex < channels; channelIndex++)
+				{
+					std::list<Peak> peaks;
+					float *pData = pBufferData + channelIndex * 1000;
+					float *pRMS = pBufferData + channels * 1000 + channelIndex;
+					// Expect 0 channel at 1.5 -> 20*log10(1.5) = 3.52, channel 1 would be 0.25 times less -> 3.52-12
+					Assert::AreEqual(channelIndex ? -8.52f : 3.52f, *pRMS, 1.0f, L"RMS values off", LINE_INFO());
+					float trough_value = pData[0];
+					size_t trough_index = 0;
+					float fStep = powf(1000.0f, 1 / 1000.0f);
+					float f = 20.0f * fStep * fStep;
+					for (size_t index = 2; index < outputSize; index++,f*=fStep)
+					{
+						float delta1 = pData[index - 1] - pData[index - 2];
+						float delta2 = pData[index] - pData[index - 1];
+						if (delta1 >= 0 && delta2 < 0)
+						{
+							float prominence = pData[index - 1] - trough_value;
+							if (prominence > 10 && pData[index - 1] > -50)	// Remove noise and only count peaks over 10db and vol > -50db
+							{
+								// Peak detected
+								Peak p;
+								p.index = index - 1;
+								p.value = pData[index - 1];
+								p.prominence = p.value - trough_value;
+								p.frequency = f;
+
+								peaks.push_back(p);
+							}
+						}
+						// Trough found
+						if (delta1 <= 0 && delta2 > 0)
+						{
+							trough_index = index;
+							trough_value = pData[index - 1];
+						}
+					}
+					if (peaks.size() == 2)	// Skip first iterations
+					{
+						Assert::AreEqual(peaks.size(), 2u, L"Expecting 2 peaks", LINE_INFO());
+						Peak p1 = peaks.front(),p2 = peaks.back();
+						// The higher tone should be about 6db (0.5 times) stronger than lower one
+						Assert::AreEqual(6.0f, p2.value - p1.value, 1.0f, L"Expect 6db off", LINE_INFO());
+
+						wchar_t szMessage[1024];
+						swprintf_s(szMessage, L"Peak check iteration %d, channel %d, p1=(%fHz %fdb) p2=(%fHz %fdb)\n", iteration, channelIndex, p1.frequency, p1.value, p2.frequency, p2.value);
+						OutputDebugString(szMessage);
+						float expectedValue = db[channelIndex] - 14.0f;
+						// 1.0db tolerance for volume
+						Assert::AreEqual(expectedValue - 6.0f, p1.value, 1.0f, szMessage, LINE_INFO());
+						Assert::AreEqual(expectedValue, p2.value, 1.0f, szMessage, LINE_INFO());
+
+						// 10% tolerance for frequency
+						Assert::AreEqual(f1[channelIndex],p1.frequency,p1.frequency*0.1f,szMessage,LINE_INFO());
+						Assert::AreEqual(f2[channelIndex], p2.frequency, p2.frequency*0.1f, szMessage, LINE_INFO());
+
+					}
+
+				}
+
+			}
 		}
 
 
-		void Run_MFT_Test(unsigned sampleRate, unsigned channels,float outputFrameRate)
+		void Run_MFT_Test(unsigned sampleRate, unsigned channels, float outputFrameRate)
 		{
 			using namespace ABI::Windows::Media;
 			using namespace ABI::Windows::Foundation;
 
 			const size_t fftLength = 2048;
-			
-			REFERENCE_TIME expectedFrameDuration =  (REFERENCE_TIME) (1e7 / outputFrameRate);
+
+			REFERENCE_TIME expectedFrameDuration = (REFERENCE_TIME)(1e7 / outputFrameRate);
 
 			ComPtr<ABI::SampleGrabber::IMyInterface> spAnalyzerOut;
 			ComPtr<IMFTransform> spTransform;
@@ -340,21 +494,17 @@ namespace AudioProcessingTests
 			HRESULT hr = spAnalyzerOut->Configure(outputFrameRate, 0.5f, fftLength);
 			hr = spAnalyzerOut->SetLinearFScale();
 
-			const unsigned T1 = 32, T2 = 128;	// Indicates one period length in samples
-			const float pi = 3.14159f;
-			const float w1 = 2.0f * pi * (1.0f / T1), w2 = 2.0f * pi * (1.0f / T2);
-
 			CGenerator g(sampleRate, channels);
 
 			// Now imitate the initial feed of input by sending 3 frames with total length of 1s
 			for (size_t i = 0; i < 3; i++)
 			{
 				ComPtr<IMFSample> spInputSample;
-				g.GetSample(&spInputSample, 16000, 
-					[w1,w2] (unsigned long sampleIndex,unsigned channel)
-					{
+				g.GetSample(&spInputSample, 16000,
+					[](unsigned long sampleIndex, unsigned channel)
+				{
 					return 0.0f;	// Test silence
-					}
+				}
 				);
 				Pump_MFT(spTransform.Get(), spInputSample.Get());
 			}
@@ -362,12 +512,12 @@ namespace AudioProcessingTests
 			Sleep(300);	// Sleep for 300ms to allow processing
 
 			// Now test for output timings
-			REFERENCE_TIME setPresentationTimes[] = 
-			{ 
+			REFERENCE_TIME setPresentationTimes[] =
+			{
 				-1,							// Test initial condition - no time set
 				expectedFrameDuration - 1,	// Test border condition -> should give frame at 0
 				expectedFrameDuration,		// Test border condition -> should give frame at expectedFrameDuration
-				(expectedFrameDuration * 7)>>1 // Set in the middle of 3rd frame (at 3,5 * duration)
+				(expectedFrameDuration * 7) >> 1 // Set in the middle of 3rd frame (at 3,5 * duration)
 			};
 			REFERENCE_TIME expectedTimes[] = { 0,0,expectedFrameDuration,500000 };
 
@@ -379,11 +529,18 @@ namespace AudioProcessingTests
 				expectedFrameDuration);
 
 			size_t expectedOutput = sampleRate / outputFrameRate;
-			Test_Levels(spAnalyzerOut.Get(),fftLength,channels);
+			Test_Zero_Levels(spAnalyzerOut.Get(), fftLength, channels);
 
-			Test_GetFrame_Continuity(spAnalyzerOut.Get(),spFakeClock.Get(),setPresentationTimes[3],expectedFrameDuration);
+			Test_GetFrame_Continuity(spAnalyzerOut.Get(), spFakeClock.Get(), setPresentationTimes[3], expectedFrameDuration);
 
-			// Test_AnalyzerOutput(spAnalyzerOut.Get());
+			// Drain the analyzer
+			spFakeClock->SetTime(0);
+			ComPtr<IAudioFrame> spFrame;
+			spAnalyzerOut->GetFrame(&spFrame);
+			Assert::IsNull(spFrame.Get(), L"Frame not null");
+
+			Test_LogFOutput(spTransform.Get(), spAnalyzerOut.Get(),spFakeClock.Get(), outputFrameRate, sampleRate, channels);
+
 		}
 	public:
 
@@ -402,7 +559,7 @@ namespace AudioProcessingTests
 			END_TEST_METHOD_ATTRIBUTE()
 			TEST_METHOD(SampleGrabber_48000_Stereo)
 		{
-			Run_MFT_Test(48000, 2,60.0f);
+			Run_MFT_Test(48000, 2, 60.0f);
 		}
 
 		BEGIN_TEST_METHOD_ATTRIBUTE(SampleGrabber_44100_Stereo)
@@ -410,7 +567,7 @@ namespace AudioProcessingTests
 			END_TEST_METHOD_ATTRIBUTE()
 			TEST_METHOD(SampleGrabber_44100_Stereo)
 		{
-			Run_MFT_Test(44100, 2,60.0f);
+			Run_MFT_Test(44100, 2, 60.0f);
 		}
 
 		/*
@@ -423,7 +580,7 @@ namespace AudioProcessingTests
 			XMVECTOR vResult = XMVectorSet(0.0f, 1.0f, 0.001f, -2.0f);
 			XMVECTOR vLog10Scaler = XMVectorReplicate(0.434294f); // This is 1/LogE(10)
 			XMVECTOR vLogMin = XMVectorReplicate(-4.816479931f);	// This is Log10(1/2^15), dynamic range for 16 bit audio
-			
+
 			XMVECTOR vLog = XMVectorLogE(vResult) * vLog10Scaler;
 			XMVECTOR vDb = XMVectorScale(XMVectorClamp(vLog, vLogMin, DirectX::g_XMOne),20.0f);
 
@@ -484,15 +641,15 @@ namespace AudioProcessingTests
 			{
 				ComPtr<IMFSample> sample;
 
-				CreateSignal(&sample, sampleRate, sampleLength, sampleOffset, vector<function<float (int)>>() = 
+				CreateSignal(&sample, sampleRate, sampleLength, sampleOffset, vector<function<float (int)>>() =
 				{
-					([w1](size_t sampleIndex) 
-					{ 
-						return sinf(w1*sampleIndex); 
+					([w1](size_t sampleIndex)
+					{
+						return sinf(w1*sampleIndex);
 					}),
-					([w2](size_t sampleIndex) 
-					{ 
-						return 0.1f * cosf(w2*sampleIndex); 
+					([w2](size_t sampleIndex)
+					{
+						return 0.1f * cosf(w2*sampleIndex);
 					})
 				});
 				sampleOffset += sampleLength;
@@ -512,7 +669,7 @@ namespace AudioProcessingTests
 				DWORD dwBufferCount = 0;
 				Assert::AreEqual(spOutSample->GetBufferCount(&dwBufferCount),S_OK,L"GetBufferCount failed");
 				Assert::AreEqual(dwBufferCount, (DWORD) 1,L"Buffer count not 1");
-				
+
 				ComPtr<IMFMediaBuffer> spOutBuffer;
 				Assert::AreEqual(spOutSample->ConvertToContiguousBuffer(&spOutBuffer),S_OK);
 
@@ -547,7 +704,7 @@ namespace AudioProcessingTests
 				REFERENCE_TIME hnsExpectedLength = 10000000L * (long long) outFrameLength / sampleRate;
 				Assert::IsTrue( hnsExpectedLength == hnsSampleDuration,L"Invalid output sample length");
 
-				// Make sure the spectrum maximums are at defined 
+				// Make sure the spectrum maximums are at defined
 				Assert::AreEqual(peak_index[0], (int)(fftLength / T1)>>1);
 				Assert::AreEqual(peak_index[1], (int)(fftLength / T2)>>1);
 			}
@@ -558,8 +715,8 @@ namespace AudioProcessingTests
 			REFERENCE_TIME hnsSampleTime;
 			spOutSample->GetSampleTime(&hnsSampleTime);
 			Assert::IsTrue(hnsSampleTime == skipTo);
-		}	
-
+		}
+		*/
 
 		BEGIN_TEST_METHOD_ATTRIBUTE(SpectrumAnalyzer_ToLogScale)
 			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
@@ -576,7 +733,7 @@ namespace AudioProcessingTests
 			std::vector<float> output(20);
 			AudioProcessing::mapToLogScale(&input[0],256, &output[0],20, 20.f/24000.f, 20000.f/24000.f);
 
-			float expected[] = { 
+			float expected[] = {
 				0.138372749f,0.211934686f,0.329434842f,0.517418683f,
 				0.812474906f,1.01610470f,0.513137400f,-0.191709042,
 				0.f,0.f,0.185964912f,0.122723825f };
@@ -588,6 +745,23 @@ namespace AudioProcessingTests
 				else
 					Assert::AreEqual(0.0f, output[i]);
 			}
-		}*/
+		}
+		BEGIN_TEST_METHOD_ATTRIBUTE(RingBuffer)
+			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
+			END_TEST_METHOD_ATTRIBUTE()
+			TEST_METHOD(RingBuffer)
+		{
+			buffers::ring_buffer<float, 8> buffer;
+			for (size_t i = 0; i < 9; i++)
+			{
+				*(buffer.writer()++) = (float)i;
+			}
+			auto rdr1 = buffer.reader() - 2;
+			Assert::AreEqual(6.0f, *rdr1);
+			rdr1++; rdr1++;
+			Assert::AreEqual(8.0f, *rdr1);
+			auto rdr2 = buffer.reader() + 10;
+			Assert::AreEqual(2.0f, *rdr2);
+		}
 	};
 }
