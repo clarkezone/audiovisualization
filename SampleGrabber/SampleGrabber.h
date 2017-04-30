@@ -33,6 +33,27 @@ class CSampleGrabber
 	{
 	public:
 		Microsoft::WRL::ComPtr<IMFSample> sample;
+		REFERENCE_TIME time;
+		REFERENCE_TIME duration;
+		sample_queue_item()
+		{
+			time = 0;
+			duration = 0;
+		}
+		sample_queue_item(IMFSample *pSample)
+		{
+			sample = pSample;
+			if (pSample != nullptr)
+			{
+				pSample->GetSampleTime(&time);
+				pSample->GetSampleDuration(&duration);
+			}
+			else
+			{
+				time = 0;
+				duration = 0;
+			}
+		}
 	};
 
 	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)

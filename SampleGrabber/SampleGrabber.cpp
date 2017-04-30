@@ -3,6 +3,7 @@
 #include "Trace.h"
 #include <windows.media.core.interop.h>
 
+#define PROCESS_SAMPLES_ASYNC
 
 CSampleGrabber::CSampleGrabber() : 
 	m_pSample(nullptr), 
@@ -1126,6 +1127,7 @@ HRESULT CSampleGrabber::OnFlush()
 HRESULT CSampleGrabber::BeginAnalysis()
 {
 	Trace::Log_BeginAnalysis();
+#ifdef PROCESS_SAMPLES_ASYNC
 	// See if the access semaphore is signaled
 	DWORD dwWaitResult = WaitForSingleObject(m_hWQAccess, 0);
 	if (dwWaitResult == WAIT_OBJECT_0) // 
@@ -1139,6 +1141,33 @@ HRESULT CSampleGrabber::BeginAnalysis()
 	}
 	else
 		return E_FAIL;
+#else
+	HRESULT hr = S_OK;
+	while (hr == S_OK)
+	{
+		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
+		Trace::Log_StartAnalyzerStep(&spActivity);
+
+		Microsoft::WRL::ComPtr<IMFSample> spSample;
+		HRESULT hr = m_Analyzer.Step(&spSample);
+		REFERENCE_TIME timestamp = -1;
+
+		if (spSample != nullptr)
+			spSample->GetSampleTime(&timestamp);
+
+		Trace::Log_StopAnalyzerStep(spActivity.Get(), timestamp, hr);
+
+		if (hr == S_OK)
+		{
+			Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spPushActivity;
+			Trace::Log_StartOutputQueuePush(&spPushActivity, timestamp);
+			CLogActivityHelper pushActivity(spPushActivity.Get());
+			auto lock = m_csOutputQueueAccess.Lock();
+			m_AnalyzerOutput.push(spSample.Get());
+		}
+	}
+	return S_OK;
+#endif
 	
 }
 HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
@@ -1160,9 +1189,7 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 		Trace::Log_StartOutputQueuePush(&spPushActivity,timestamp);
 		CLogActivityHelper pushActivity(spPushActivity.Get());
 		auto lock =  m_csOutputQueueAccess.Lock();
-		sample_queue_item item;
-		item.sample = spSample;
-		m_AnalyzerOutput.push(item);
+		m_AnalyzerOutput.push(spSample.Get());
 	}
 	else
 	{

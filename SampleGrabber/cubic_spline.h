@@ -74,7 +74,7 @@ template<class T> HRESULT mapToLogScale(const T *pInput, size_t inputSize, T *pO
 			}
 			// Add end values
 			sum += pInput[inValueIntIndex] * (1.f - fInputIndex + inValueIntIndex);
-			if (inValueIntNextIndex < inputSize)
+			if (inValueIntNextIndex < (int) inputSize)
 			{
 				sum += pInput[inValueIntNextIndex] * (fNextIndex - inValueIntNextIndex);
 			}

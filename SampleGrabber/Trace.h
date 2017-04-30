@@ -38,8 +38,6 @@ public:
 	static HRESULT Log_SetInputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT32 overlap, UINT32 fftLength, HRESULT hConfigureResult);
-	static HRESULT Log_QueueInput(IMFSample *pSample);
-	static HRESULT Log_InputDiscontinuity();
 	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime,size_t queueSize);
 	static HRESULT Log_TestFrame(REFERENCE_TIME currentTime,REFERENCE_TIME start, REFERENCE_TIME duration);
 	static HRESULT Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration);
@@ -54,11 +52,10 @@ public:
 	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
 	static HRESULT Log_OutputQueuePop(REFERENCE_TIME time, REFERENCE_TIME duration, size_t queueSize);
 	static HRESULT Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME expected);
-	static HRESULT Log_StartCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, IMFMediaBuffer *pBuffer, size_t copiedFrameCount, size_t stepFrameCount, size_t currentBufferIndex);
-	static HRESULT Log_StopCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, size_t copiedFrameCount, size_t currentBufferIndex,unsigned line,HRESULT hr);
-	static HRESULT Log_StartCopyLoop(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,size_t m_CopiedFrameCount, size_t m_StepFrameCount, size_t m_CurrentBufferSampleIndex, size_t samplesInBuffer, size_t m_AudioChannels);
-	static HRESULT Log_StopCopyLoop(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *ppActivity, size_t m_CopiedFrameCount, size_t m_StepFrameCount, size_t m_CurrentBufferSampleIndex, size_t samplesInBuffer, size_t m_AudioChannels);
-	static HRESULT Log_QIPop(IMFMediaBuffer *pBuffer, REFERENCE_TIME time);
+
+	static HRESULT Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME sampleTime, size_t samplesInBuffer,void *pWritePtr,void *pReadPtr,long inputSampleOffset, long expectedOffset);
+	static HRESULT Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset);
+	static HRESULT Log_SA_ClearInputBuffer();
 
 
 	static HRESULT Log_LockInputBuffer(IMFMediaBuffer *pBuffer);

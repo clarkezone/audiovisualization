@@ -27,11 +27,8 @@ using namespace Microsoft::WRL::Wrappers;
 #define ANALYZER_SET_FRAME_TIME L"SA_SetTime"
 #define ANALYZER_COPY_NEXT_SAMPLE L"SA_NextSample"
 #define ANALYZER_COPY_LOOP L"SA_CopyLoop"
-
-// Input queue events
-#define QI_PUSH L"QI_Push"
-#define QI_POP L"QI_Pop"
-#define QI_DISCONTINUITY L"QI_Discontinuity"
+#define ANALYZER_APPEND_INPUT L"SA_AppendInput"
+#define ANALYZER_CLEAR_INPUT L"SA_ClearInput"
 
 // Output queue events
 #define QO_PUSH L"QO_Push"
@@ -208,48 +205,7 @@ HRESULT Trace::Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT3
 	return hr;
 }
 
-HRESULT Trace::Log_QueueInput(IMFSample * pSample)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
 
-	REFERENCE_TIME sampleTime = 0, duration = 0;
-	DWORD sampleFlags = 0;
-	pSample->GetSampleTime(&sampleTime);
-	pSample->GetSampleDuration(&duration);
-	pSample->GetSampleFlags(&sampleFlags);
-	UINT32 discontinuity = 0;
-	pSample->GetUINT32(MFSampleExtension_Discontinuity, &discontinuity);
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { sampleTime });
-	fields->AddTimeSpan(HStringReference(L"Duration").Get(), ABI::Windows::Foundation::TimeSpan() = { duration });
-	// Now process buffer
-	DWORD dwBufferCount = 0;
-	pSample->GetBufferCount(&dwBufferCount);
-	std::vector<IMFMediaBuffer *> buffers(dwBufferCount);
-	std::vector<UINT32> lengths(dwBufferCount);
-	for (size_t bufferIndex = 0; bufferIndex < dwBufferCount; bufferIndex++)
-	{
-		IMFMediaBuffer *pBuffer;
-		pSample->GetBufferByIndex(bufferIndex, &pBuffer);
-		DWORD dwBufferLength = 0;
-		pBuffer->GetCurrentLength(&dwBufferLength);
-		buffers[bufferIndex] = pBuffer;
-		lengths[bufferIndex] = dwBufferLength / sizeof(float);
-	}
-	fields->AddUInt32ArrayWithFormat(HStringReference(L"Buffers").Get(), dwBufferCount, (UINT32 *)&*buffers.begin(), LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
-	fields->AddUInt32Array(HStringReference(L"BufLen").Get(), dwBufferCount, &*lengths.begin());
-	
-	hr = g_spLogChannel->LogEventWithFields(HStringReference(QI_PUSH).Get(), fields.Get());
-
-	return hr;
-}
-
-HRESULT Trace::Log_InputDiscontinuity()
-{
-	return g_spLogChannel->LogEvent(HStringReference(QI_DISCONTINUITY).Get());
-}
 HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME presentationTime,size_t queueSize)
 {
 	ComPtr<ILoggingFields> fields;
@@ -393,116 +349,6 @@ HRESULT Trace::Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME 
 	return g_spLogChannel->LogEventWithFields(HStringReference(QO_DISCONTINUITY).Get(), fields.Get());
 }
 
-HRESULT Trace::Log_StartCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity,IMFMediaBuffer *pBuffer, 
-	size_t copiedFrameCount, size_t stepFrameCount, size_t currentBufferIndex)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	fields->AddUInt32(HStringReference(L"CopiedFrames").Get(), copiedFrameCount);
-	fields->AddUInt32(HStringReference(L"Step").Get(), stepFrameCount);
-	fields->AddUInt32(HStringReference(L"BufferIndex").Get(), currentBufferIndex);
-	if (pBuffer != nullptr)
-	{
-		DWORD dwLength = 0, dwMaxLength = 0;
-		pBuffer->GetCurrentLength(&dwLength);
-		pBuffer->GetMaxLength(&dwMaxLength);
-		fields->AddUInt32(HStringReference(L"Samples").Get(), dwLength / sizeof(float));
-		fields->AddUInt32(HStringReference(L"MaxSamples").Get(), dwMaxLength / sizeof(float));
-	}
-	else
-	{
-		fields->AddEmpty(HStringReference(L"Samples").Get());
-		fields->AddEmpty(HStringReference(L"MaxSamples").Get());
-	}
-	return g_spLogChannel->StartActivityWithFields(HStringReference(ANALYZER_COPY_DATA).Get(),fields.Get(),ppActivity);
-}
-
-HRESULT Trace::Log_StopCopyDataFromInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity * pActivity, size_t copiedFrameCount, size_t currentBufferIndex, unsigned line, HRESULT result)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	fields->AddUInt32(HStringReference(L"CopiedFrames").Get(), copiedFrameCount);
-	fields->AddUInt32(HStringReference(L"BufferIndex").Get(), currentBufferIndex);
-	fields->AddUInt32WithFormat(HStringReference(L"HResult").Get(), result, LoggingFieldFormat::LoggingFieldFormat_HResult);
-	fields->AddUInt32(HStringReference(L"Line").Get(), line);
-
-	ComPtr<ILoggingActivity> spActivity = pActivity;
-	ComPtr<ILoggingActivity2> spActivity2;
-	spActivity.As(&spActivity2);
-	HSTRING hName;
-	spActivity->get_Name(&hName);
-	return spActivity2->StopActivityWithFields(hName, fields.Get());
-}
-
-HRESULT Trace::Log_StartCopyLoop(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity, size_t m_CopiedFrameCount, size_t m_StepFrameCount, size_t m_CurrentBufferSampleIndex, size_t samplesInBuffer, size_t m_AudioChannels)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	fields->AddUInt32(HStringReference(L"CopiedFrames").Get(), m_CopiedFrameCount);
-	fields->AddUInt32(HStringReference(L"Step").Get(), m_StepFrameCount);
-	fields->AddUInt32(HStringReference(L"BufferIndex").Get(), m_CurrentBufferSampleIndex);
-	fields->AddUInt32(HStringReference(L"SamplesInBuffer").Get(), samplesInBuffer);
-	fields->AddUInt32(HStringReference(L"Channels").Get(), m_AudioChannels);
-
-	return g_spLogChannel->StartActivityWithFields(HStringReference(ANALYZER_COPY_LOOP).Get(), fields.Get(), ppActivity);
-}
-
-HRESULT Trace::Log_StopCopyLoop(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, size_t m_CopiedFrameCount, size_t m_StepFrameCount, size_t m_CurrentBufferSampleIndex, size_t samplesInBuffer, size_t m_AudioChannels)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-	fields->AddUInt32(HStringReference(L"CopiedFrames").Get(), m_CopiedFrameCount);
-	fields->AddUInt32(HStringReference(L"Step").Get(), m_StepFrameCount);
-	fields->AddUInt32(HStringReference(L"BufferIndex").Get(), m_CurrentBufferSampleIndex);
-	fields->AddUInt32(HStringReference(L"SamplesInBuffer").Get(), samplesInBuffer);
-	fields->AddUInt32(HStringReference(L"Channels").Get(), m_AudioChannels);
-
-	ComPtr<ILoggingActivity> spActivity = pActivity;
-	ComPtr<ILoggingActivity2> spActivity2;
-	spActivity.As(&spActivity2);
-	HSTRING hName;
-	spActivity->get_Name(&hName);
-	return spActivity2->StopActivityWithFields(hName, fields.Get());
-}
-
-HRESULT Trace::Log_QIPop(IMFMediaBuffer * pBuffer, REFERENCE_TIME time)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	if (pBuffer != nullptr)
-	{
-		DWORD dwLength = 0, dwMaxLength = 0;
-		pBuffer->GetCurrentLength(&dwLength);
-		pBuffer->GetMaxLength(&dwMaxLength);
-		fields->AddUInt32(HStringReference(L"Samples").Get(), dwLength / sizeof(float));
-		fields->AddUInt32(HStringReference(L"MaxSamples").Get(), dwMaxLength / sizeof(float));
-		fields->AddUInt32WithFormat(HStringReference(L"Ptr").Get(), (UINT32)pBuffer, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
-	}
-	else
-	{
-		fields->AddEmpty(HStringReference(L"Samples").Get());
-		fields->AddEmpty(HStringReference(L"MaxSamples").Get());
-		fields->AddEmpty(HStringReference(L"Ptr").Get());
-	}
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
-
-	return g_spLogChannel->LogEventWithFields(HStringReference(QI_POP).Get(), fields.Get());
-
-}
 
 HRESULT Trace::Log_LockInputBuffer(IMFMediaBuffer * pBuffer)
 {
@@ -545,4 +391,46 @@ HRESULT Trace::Log_SetCopiedFrameTime(REFERENCE_TIME time)
 HRESULT Trace::Log_CopyNextSample()
 {
 	return g_spLogChannel->LogEvent(HStringReference(ANALYZER_COPY_NEXT_SAMPLE).Get());
+}
+
+HRESULT Trace::Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, 
+	REFERENCE_TIME sampleTime, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long inputSampleOffset, long expectedOffset)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+
+	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { sampleTime });
+	fields->AddUInt32(HStringReference(L"SamplesInBuffer").Get(), samplesInBuffer);
+	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddInt64(HStringReference(L"Offset").Get(), inputSampleOffset);
+	fields->AddInt64(HStringReference(L"ExpectedOffset").Get(), expectedOffset);
+	return g_spLogChannel->StartActivityWithFields(HStringReference(ANALYZER_APPEND_INPUT).Get(), fields.Get(), ppActivity);
+
+}
+HRESULT Trace::Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+
+	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { sampleTime });
+	fields->AddUInt32(HStringReference(L"SamplesInBuffer").Get(), samplesInBuffer);
+	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddInt64(HStringReference(L"ExpectedOffset").Get(), expectedOffset);
+
+	ComPtr<ILoggingActivity> spActivity = pActivity;
+	ComPtr<ILoggingActivity2> spActivity2;
+	spActivity.As(&spActivity2);
+	HSTRING hName;
+	spActivity->get_Name(&hName);
+	return spActivity2->StopActivityWithFields(hName, fields.Get());
+}
+HRESULT Trace::Log_SA_ClearInputBuffer()
+{
+	return g_spLogChannel->LogEvent(HStringReference(ANALYZER_CLEAR_INPUT).Get());
 }

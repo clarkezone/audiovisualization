@@ -15,9 +15,6 @@ CSpectrumAnalyzer::CSpectrumAnalyzer() :
 	m_StepFrameOverlap(0),
 	m_StepTotalFrames(0),
 	m_pWindow(nullptr),
-	m_pInputBuffer(nullptr),
-	m_CopiedFrameCount(0),
-	m_InputWriteIndex(0),
 	m_InputReadPtrSampleIndex(-1),
 	m_ExpectedInputSampleOffset(-1),
 	m_pFftUnityTable(nullptr),
@@ -102,9 +99,6 @@ HRESULT CSpectrumAnalyzer::AllocateBuffers()
 	// Allocate data for the input data ring buffer
 	m_InputReadPtrSampleIndex = 0;
 
-	m_CopiedFrameCount = 0;
-	m_InputWriteIndex = 0;
-
 	m_pWindow = static_cast<float *>(malloc(m_StepTotalFrames * sizeof(float)));
 
 	// Initialize window, use Blackman-Nuttall window for low sidelobes
@@ -132,7 +126,6 @@ HRESULT CSpectrumAnalyzer::AllocateBuffers()
 void CSpectrumAnalyzer::FreeBuffers()
 {
 	free(m_pWindow);
-	free(m_pInputBuffer);
 
 	if (m_pFftUnityTable != nullptr)
 		_aligned_free(m_pFftUnityTable);
@@ -152,11 +145,15 @@ HRESULT CSpectrumAnalyzer::AppendInput(IMFSample * pSample)
 
 	long sampleOffset = m_AudioChannels * (long)((sampleTime * m_InputSampleRate + 5000000) / 10000000);	// Avoid int arithmetic problems by rounding
 
+	ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
+	Trace::Log_SA_Start_AppendInput(&spActivity,sampleTime, m_InputBuffer.size(),(void *)&*m_InputBuffer.writer(),(void *)&*m_InputBuffer.reader(), sampleOffset, m_ExpectedInputSampleOffset);
+
 	// If there is some data in the buffer, validate that the input data is contiguous
 	// Otherwise empty the buffer, read pointer lock needs to be aquired only when clearing the buffer
-	if (!m_InputBuffer.empty() && sampleOffset != m_ExpectedInputSampleOffset)
+	if (m_InputBuffer.empty() || sampleOffset != m_ExpectedInputSampleOffset)
 	{
 		auto lock = m_csReadPtr.Lock();
+		Trace::Log_SA_ClearInputBuffer();
 		m_InputBuffer.clear();
 		m_InputReadPtrSampleIndex = -1;	// Get the index for reader
 	}
@@ -175,12 +172,12 @@ HRESULT CSpectrumAnalyzer::AppendInput(IMFSample * pSample)
 	if (FAILED(hr))
 		return hr;
 
-	for (size_t sampleIndex = 0; sampleIndex < cbCurrentLength / sizeof(float); sampleIndex++)
-	{
-		*(m_InputBuffer.writer()++) = pBufferData[sampleIndex];
-	}
+	m_InputBuffer.insert(pBufferData, cbCurrentLength / sizeof(float));
 
 	m_ExpectedInputSampleOffset = sampleOffset + cbCurrentLength / sizeof(float);	// Calculate the next sample offset
+
+	Trace::Log_SA_Stop_AppendInput(spActivity.Get(),sampleTime, m_InputBuffer.size(), 
+		(void*)&*m_InputBuffer.writer(),(void*) &*m_InputBuffer.reader(),m_ExpectedInputSampleOffset);
 
 	hr = spBuffer->Unlock();
 	if (FAILED(hr))
@@ -232,24 +229,10 @@ HRESULT CSpectrumAnalyzer::GetRingBufferData(float *pData,REFERENCE_TIME *pTimeS
 {
 	auto readerLock = m_csReadPtr.Lock();	// Get lock on modifying the reader pointer
 
-											// Not enough samples in ring buffer
-	if (m_InputBuffer.size() < m_StepFrameCount)
+	// Not enough samples in ring buffer
+	bool bSuccess = m_InputBuffer.get(pData, m_StepFrameCount, m_AudioChannels, m_FFTLength, m_StepFrameOverlap, m_pWindow);
+	if (!bSuccess)
 		return S_FALSE;
-
-	auto src = m_InputBuffer.reader() - (m_StepFrameOverlap * m_AudioChannels);	// Offset by overlap
-
-	// Now window, de-interleave and copy the data
-	for (size_t index = 0; index < m_FFTLength; index++)
-	{
-		for (size_t channelIndex = 0,dataIndex = index; channelIndex < m_AudioChannels; channelIndex++,dataIndex += m_FFTLength)
-		{
-			if (index < m_StepFrameCount + m_StepFrameOverlap)
-				pData[dataIndex] = m_pWindow[index] * (*(src++));
-			else
-				pData[dataIndex] = 0;
-		}
-	}
-	m_InputBuffer.reader() += m_StepFrameCount * m_AudioChannels;	// These are samples not frames
 
 	*pTimeStamp = 10000000 * (long long)m_InputReadPtrSampleIndex / m_InputSampleRate;
 	m_InputReadPtrSampleIndex += m_StepFrameCount;
@@ -295,15 +278,18 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 	auto lock = m_csConfigAccess.Lock();	// Lock object for config changes
 	
 	REFERENCE_TIME hnsDataTime = 0;
-	GetRingBufferData((float *)m_pFftReal, &hnsDataTime);
+	HRESULT hr = GetRingBufferData((float *)m_pFftReal, &hnsDataTime);
+	if (hr != S_OK)
+		return hr;
 
 	// Create output media sample
 	ComPtr<IMFMediaBuffer> spBuffer;
 
 	// Create aligned buffer for vector math + 16 bytes for 8 floats for RMS values
-	size_t outputLength = m_bUseLogFScale ? m_logElementsCount : m_FFTLength;
+	// In linear output length is going to be 1/2 of the FFT length
+	size_t outputLength = m_bUseLogFScale ? m_logElementsCount : m_FFTLength>>1;
 	size_t vOutputLength = (outputLength + 3) >> 2;		// To use vector math allocate buffer for each channel which is rounded up to the next 16 byte boundary
-	HRESULT hr = MFCreateAlignedMemoryBuffer((sizeof(XMVECTOR)*vOutputLength*m_AudioChannels) + 2 * sizeof(XMVECTOR), 16, &spBuffer);
+	hr = MFCreateAlignedMemoryBuffer((sizeof(XMVECTOR)*vOutputLength*m_AudioChannels) + 2 * sizeof(XMVECTOR), 16, &spBuffer);
 	if (FAILED(hr))
 		return hr;
 
@@ -355,8 +341,6 @@ void CSpectrumAnalyzer::Reset()
 {
 	m_InputBuffer.clear();
 	// Clean up any state from buffer copying
-	m_CopiedFrameCount = 0;
-	m_InputWriteIndex = 0;
 }
 
 

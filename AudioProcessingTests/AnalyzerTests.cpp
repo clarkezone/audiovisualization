@@ -41,6 +41,7 @@ namespace AudioProcessingTests
 {
 	// Function to generate signal
 	typedef float (SignalFunc)(size_t);
+	const float pi = 3.14159f;
 
 	template <class T, class U> ComPtr<T> As(Microsoft::WRL::ComPtr<U> spU)
 	{
@@ -287,20 +288,6 @@ namespace AudioProcessingTests
 			return 10000000L * (long long)computedFrameOffset / 48000L;
 		}
 
-		// Test the output of the analyzer
-		void Test_AnalyzerOutput(ABI::SampleGrabber::IMyInterface *pAnalyzer)
-		{
-			using namespace ABI::Windows::Media;
-			ComPtr <IAudioFrame> spFrame;
-			HRESULT hr = pAnalyzer->GetFrame(&spFrame);
-			ValidateSuccess(hr, L"Failed to get audio frame");
-
-			ComPtr<IAudioBuffer> spBuffer;
-			hr = spFrame->LockBuffer(AudioBufferAccessMode::AudioBufferAccessMode_Read, &spBuffer);
-
-			ValidateSuccess(hr, L"Failed to get audio buffer");
-		}
-
 		void Test_Zero_Levels(ABI::SampleGrabber::IMyInterface *pAnalyzer, size_t fftLength, size_t channels)
 		{
 			using namespace ABI::Windows::Media;
@@ -311,7 +298,7 @@ namespace AudioProcessingTests
 
 			CAudioBufferHelper b(spFrame.Get());
 			UINT32 length = b.GetLength();
-			UINT32 expectedLength = (fftLength * channels) + 8;
+			UINT32 expectedLength = (fftLength >> 1) * channels + 8;
 			Assert::AreEqual(expectedLength * sizeof(float), length, L"Unexpected buffer length", LINE_INFO());
 
 			float *pBuffer = b.GetBuffer();
@@ -346,7 +333,6 @@ namespace AudioProcessingTests
 			std::vector<float> a(channels), db(channels);
 			float base_f1 = 100.0f, base_f2 = 1000.0f;
 			float base_amp = 1.0;
-			const float pi = 3.14159f;
 			for (size_t channelIndex = 0; channelIndex < channels; channelIndex++, base_f1 *= 1.5f, base_f2 *= 1.5, base_amp *= 0.25)
 			{
 				w1[channelIndex] = 2.0f*pi*base_f1 / (float)sampleRate;
@@ -380,7 +366,7 @@ namespace AudioProcessingTests
 			REFERENCE_TIME clockStep = (1e7 / outputFrameRate);
 			REFERENCE_TIME clock = 1200 + clockStep;	// Some offset
 
-			for (size_t iteration = 0; iteration < 120; iteration++, clock += clockStep)
+			for (size_t iteration = 0; iteration < 80; iteration++, clock += clockStep)
 			{
 				pClock->SetTime(clock);
 
@@ -460,9 +446,67 @@ namespace AudioProcessingTests
 					// 10% tolerance for frequency
 					Assert::AreEqual(f1[channelIndex], p1.frequency, p1.frequency*0.1f, szMessage, LINE_INFO());
 					Assert::AreEqual(f2[channelIndex], p2.frequency, p2.frequency*0.1f, szMessage, LINE_INFO());
-
 				}
+			}
+			// Drain MFT by requesting sample from the start of the queue
+			pClock->SetTime(0);
+			ComPtr<IAudioFrame> spFrame;
+			pAnalyzer->GetFrame(&spFrame);
+			Assert::IsNull(spFrame.Get(), L"Drain", LINE_INFO());
+		}
+		void Test_Output_Timings(IMFTransform *pMft, ABI::SampleGrabber::IMyInterface *pAnalyzer, CFakeClock *pClock, float outputFrameRate, size_t sampleRate, size_t channels)
+		{
+			using namespace ABI::Windows::Media;
+			size_t fftLen = 4096;
+			pAnalyzer->Configure(60.0, 0, fftLen);
+			pAnalyzer->SetLinearFScale();
+			// Generate a series of signal pulses in left and right channels with period of 1/60
+			// |----|              |----|
+			// |    |----|    |----|    |
+			// |         |----|
 
+			CGenerator g(sampleRate, channels);
+
+			const size_t iterationSampleCount = 16000;
+			const size_t preRollIterations = 6;
+
+			size_t signalSections = channels << 1;
+			size_t sectionLength = sampleRate / 60;
+			float w = 2 * pi * 1000 / sampleRate;	// Signal is 1kHz
+			for (size_t iterations = 0; iterations < preRollIterations; iterations++)
+			{
+				ComPtr<IMFSample> spInputSample;
+				g.GetSample(&spInputSample, iterationSampleCount,
+					[=](unsigned long sampleIndex, unsigned channel)
+				{
+					size_t sectionIndex = sampleIndex / sectionLength;
+					size_t sectionType = sectionIndex % signalSections;
+					// If bit1 is set return always 0. If rest of the bits match channel, generate signal
+					return (sectionType & 1) ? 0.0f : (sectionType >> 1 == channel) ? sinf(w*sampleIndex) : 0.0f;
+				}
+				);
+				Pump_MFT(pMft, spInputSample.Get());
+				Sleep(50);
+			}
+
+			REFERENCE_TIME time = 100;
+
+			for (size_t iteration = 0; iteration < 60; iteration++,time+=16666)
+			{
+				pClock->SetTime(time);
+
+				ComPtr<IAudioFrame> spFrame;
+				HRESULT hr = pAnalyzer->GetFrame(&spFrame);
+				Assert::IsTrue(hr == S_OK, L"AsByteAccess", LINE_INFO());
+				Assert::IsNotNull(spFrame.Get(), L"Frame null", LINE_INFO());
+				CAudioBufferHelper buffer(spFrame.Get());
+				size_t len = buffer.GetLength();
+				Assert::AreEqual(sizeof(float)*(8 + channels * fftLen / 2), len, L"Incorrect frame size", LINE_INFO());
+				float *pBufferData = buffer.GetBuffer();
+				float *pRMS = pBufferData + channels * (fftLen >> 1);
+				wchar_t szMessage[1024];
+				swprintf_s(szMessage, L"[%d] %d (%f,%f)\n", iteration, iteration % signalSections,pRMS[0], pRMS[1]);
+				OutputDebugString(szMessage);
 			}
 		}
 
@@ -538,6 +582,7 @@ namespace AudioProcessingTests
 
 			Test_LogFOutput(spTransform.Get(), spAnalyzerOut.Get(), spFakeClock.Get(), outputFrameRate, sampleRate, channels);
 
+			Test_Output_Timings(spTransform.Get(), spAnalyzerOut.Get(), spFakeClock.Get(), outputFrameRate, sampleRate, channels);
 		}
 	public:
 
@@ -759,6 +804,49 @@ namespace AudioProcessingTests
 			Assert::AreEqual(8.0f, *rdr1);
 			auto rdr2 = buffer.reader() + 10;
 			Assert::AreEqual(2.0f, *rdr2);
+
 		}
-	};
+		BEGIN_TEST_METHOD_ATTRIBUTE(RingBuffer_size)
+			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
+			END_TEST_METHOD_ATTRIBUTE()
+			TEST_METHOD(RingBuffer_size)
+		{
+			const size_t bufferSize = 4;
+			buffers::ring_buffer<float, bufferSize> buffer;
+			size_t expectedSize = 0;
+			wchar_t szBuffer[1024];
+			for (size_t readerIteration = 0; readerIteration < 5; readerIteration++)
+			{
+				for (size_t writerIteration = 0; writerIteration < 4; writerIteration++)
+				{					
+					Assert::AreEqual(expectedSize, buffer.size());
+					expectedSize = (expectedSize + 1) % bufferSize;
+					buffer.writer()++;
+				}
+				expectedSize = (expectedSize + bufferSize - 1) % bufferSize;
+				buffer.reader()++;
+			}
+		}
+		BEGIN_TEST_METHOD_ATTRIBUTE(RingBuffer_insert)
+			TEST_METHOD_ATTRIBUTE(L"Category", L"Analyzer")
+			END_TEST_METHOD_ATTRIBUTE()
+			TEST_METHOD(RingBuffer_insert)
+		{
+			buffers::ring_buffer<float, 5> buffer;
+			float src1[] = { 0,1,2 };
+			buffer.insert(src1, 3);
+			float expected1[] = { 0,1,2 };
+			for (size_t i = 0; i < 3; i++)
+			{
+				Assert::AreEqual(expected1[i], *(buffer.reader()++), L"insert1", LINE_INFO());
+			}
+			float src2[] = { 3, 4, 5 };
+			buffer.insert(src2, 3);
+			float expected2[] = { 3,4,5 };
+			for (size_t i = 0; i < 3; i++)
+			{
+				Assert::AreEqual(expected2[i], *(buffer.reader()++), L"insert1", LINE_INFO());
+			}
+		}
+		};
 }

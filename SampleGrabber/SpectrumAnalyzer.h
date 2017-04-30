@@ -50,16 +50,12 @@ private:
 	unsigned m_FFTLength;
 	unsigned m_FFTLengthPow2;	// FFT length expressed as power of 2
 
-	size_t m_CopiedFrameCount;	// Keeps track of how many frames have been copied in case of a jump from sample to next
-	size_t m_InputWriteIndex;	// Index into m_pInputBuffer - this is where next sample will be copied to
-
 	buffers::ring_buffer<float, 480000u> m_InputBuffer;		// Allocate 5 seconds stereo for 48kHz rate
 
 	Microsoft::WRL::Wrappers::CriticalSection m_csReadPtr;
 
 	long m_InputReadPtrSampleIndex;
 	long m_ExpectedInputSampleOffset;
-	float *m_pInputBuffer;
 
 
 	float *m_pWindow;
