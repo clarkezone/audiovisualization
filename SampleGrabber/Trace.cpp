@@ -29,7 +29,7 @@ using namespace Microsoft::WRL::Wrappers;
 #define ANALYZER_COPY_LOOP L"SA_CopyLoop"
 #define ANALYZER_APPEND_INPUT L"SA_AppendInput"
 #define ANALYZER_CLEAR_INPUT L"SA_ClearInput"
-
+#define ANALYZER_GET_RB_DATA L"SA_GetRB"
 // Output queue events
 #define QO_PUSH L"QO_Push"
 #define QO_DISCONTINUITY L"QO_Discontinuity"
@@ -394,7 +394,7 @@ HRESULT Trace::Log_CopyNextSample()
 }
 
 HRESULT Trace::Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, 
-	REFERENCE_TIME sampleTime, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long inputSampleOffset, long expectedOffset)
+	REFERENCE_TIME sampleTime, size_t sampleCount,size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long inputSampleOffset, long expectedOffset)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
@@ -402,7 +402,8 @@ HRESULT Trace::Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::I
 		return hr;
 
 	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { sampleTime });
-	fields->AddUInt32(HStringReference(L"SamplesInBuffer").Get(), samplesInBuffer);
+	fields->AddUInt32(HStringReference(L"SampleSize").Get(), sampleCount);
+	fields->AddUInt32(HStringReference(L"BufferSize").Get(), samplesInBuffer);
 	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddInt64(HStringReference(L"Offset").Get(), inputSampleOffset);
@@ -410,7 +411,8 @@ HRESULT Trace::Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::I
 	return g_spLogChannel->StartActivityWithFields(HStringReference(ANALYZER_APPEND_INPUT).Get(), fields.Get(), ppActivity);
 
 }
-HRESULT Trace::Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset)
+HRESULT Trace::Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, 
+	REFERENCE_TIME sampleTime, size_t sampleSize, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
@@ -418,7 +420,8 @@ HRESULT Trace::Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::IL
 		return hr;
 
 	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { sampleTime });
-	fields->AddUInt32(HStringReference(L"SamplesInBuffer").Get(), samplesInBuffer);
+	fields->AddUInt32(HStringReference(L"SampleLength").Get(), sampleSize);
+	fields->AddUInt32(HStringReference(L"BufferSize").Get(), samplesInBuffer);
 	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddInt64(HStringReference(L"ExpectedOffset").Get(), expectedOffset);
@@ -433,4 +436,38 @@ HRESULT Trace::Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::IL
 HRESULT Trace::Log_SA_ClearInputBuffer()
 {
 	return g_spLogChannel->LogEvent(HStringReference(ANALYZER_CLEAR_INPUT).Get());
+}
+
+HRESULT Trace::Log_StartCopyRBData(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, 
+	size_t bufferSize, const void *pReadPtr, const void *pWritePtr)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+
+	fields->AddUInt32(HStringReference(L"BufferSize").Get(), bufferSize);
+	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	return g_spLogChannel->StartActivityWithFields(HStringReference(ANALYZER_GET_RB_DATA).Get(), fields.Get(), ppActivity);
+}
+HRESULT Trace::Log_StopCopyRBData(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, bool bSuccess, size_t bufferSize, const void *pReadPtr, const void *pWritePtr)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+
+	fields->AddBoolean(HStringReference(L"Success").Get(), bSuccess);
+	fields->AddUInt32(HStringReference(L"BufferSize").Get(), bufferSize);
+	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+
+	ComPtr<ILoggingActivity> spActivity = pActivity;
+	ComPtr<ILoggingActivity2> spActivity2;
+	spActivity.As(&spActivity2);
+	HSTRING hName;
+	spActivity->get_Name(&hName);
+	return spActivity2->StopActivityWithFields(hName, fields.Get());
+
 }

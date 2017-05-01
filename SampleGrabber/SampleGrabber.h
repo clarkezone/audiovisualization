@@ -290,9 +290,9 @@ private:
 	concurrency::concurrent_queue<sample_queue_item> m_AnalyzerOutput;
 	long m_ExpectedFrameOffset;
 	HANDLE m_hWQAccess;	
-	AsyncCallback<CSampleGrabber> m_AnalysisCompleteCallback;
+	AsyncCallback<CSampleGrabber> m_AnalysisStepCallback;
 	HRESULT BeginAnalysis();
 	HRESULT ConfigureAnalyzer();
-	HRESULT OnAnalysisStepComplete(IMFAsyncResult *pResult);
+	HRESULT OnAnalysisStep(IMFAsyncResult *pResult);
 };
 

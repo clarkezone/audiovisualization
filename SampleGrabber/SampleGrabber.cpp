@@ -9,7 +9,7 @@ CSampleGrabber::CSampleGrabber() :
 	m_pSample(nullptr), 
 	m_pOutputType(nullptr), 
 	m_pInputType(nullptr),
-	m_AnalysisCompleteCallback(this,&CSampleGrabber::OnAnalysisStepComplete),
+	m_AnalysisStepCallback(this,&CSampleGrabber::OnAnalysisStep),
 	m_fOutputSampleRate(60.0f),
 	m_fSampleOverlapPercentage(0.5f),
 	m_bIsLogFScale(false),
@@ -132,12 +132,9 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 		hr = item->sample->GetSampleDuration(&sampleDuration);
 		if (FAILED(hr))
 			return hr;
-		REFERENCE_TIME nextTime = sampleTime + sampleDuration;
-		item++;
-		if (item != m_AnalyzerOutput.unsafe_end())
-			item->sample->GetSampleTime(&nextTime);
 
-		if (currentPosition >= sampleTime && currentPosition < nextTime)
+		// Add 5uS (about half sample time @96k) to avoid int time math rounding errors
+		if (currentPosition >= sampleTime && currentPosition <= sampleDuration + sampleTime + 50L)
 		{
 			Trace::Log_FrameFound(sampleTime, sampleDuration);
 			spSample = m_AnalyzerOutput.unsafe_begin()->sample;
@@ -1132,7 +1129,7 @@ HRESULT CSampleGrabber::BeginAnalysis()
 	DWORD dwWaitResult = WaitForSingleObject(m_hWQAccess, 0);
 	if (dwWaitResult == WAIT_OBJECT_0) // 
 	{
-		return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
+		return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisStepCallback, nullptr);
 	}
 	else if (dwWaitResult == WAIT_TIMEOUT)
 	{
@@ -1170,7 +1167,7 @@ HRESULT CSampleGrabber::BeginAnalysis()
 #endif
 	
 }
-HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
+HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 {
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
 	Trace::Log_StartAnalyzerStep(&spActivity);
@@ -1199,7 +1196,7 @@ HRESULT CSampleGrabber::OnAnalysisStepComplete(IMFAsyncResult *pResult)
 	}
 
 	// Schedule next work item
-	return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisCompleteCallback, nullptr);
+	return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisStepCallback, nullptr);
 }
 
 HRESULT CSampleGrabber::ConfigureAnalyzer()

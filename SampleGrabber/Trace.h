@@ -53,9 +53,13 @@ public:
 	static HRESULT Log_OutputQueuePop(REFERENCE_TIME time, REFERENCE_TIME duration, size_t queueSize);
 	static HRESULT Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME expected);
 
-	static HRESULT Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME sampleTime, size_t samplesInBuffer,void *pWritePtr,void *pReadPtr,long inputSampleOffset, long expectedOffset);
-	static HRESULT Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset);
+	static HRESULT Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME sampleTime, size_t sampleCount,size_t samplesInBuffer,void *pWritePtr,void *pReadPtr,long inputSampleOffset, long expectedOffset);
+	static HRESULT Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t sampleSize,size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset);
 	static HRESULT Log_SA_ClearInputBuffer();
+
+	static HRESULT Log_StartCopyRBData(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,size_t bufferSize,const void *pReadPtr,const void *pWritePtr);
+	static HRESULT Log_StopCopyRBData(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, bool bSuccess, size_t bufferSize,const void *pReadPtr,const void *pWritePtr);
+
 
 
 	static HRESULT Log_LockInputBuffer(IMFMediaBuffer *pBuffer);
