@@ -87,7 +87,7 @@ HRESULT CSampleGrabber::GetVector(ABI::Windows::Foundation::Collections::IVector
 
 HRESULT CSampleGrabber::GetSingleData(ABI::SampleGrabber::Data *pData) {
 	ABI::SampleGrabber::Data data;
-	data.VariableOne = 256.999;
+	data.VariableOne = 256.999f;
 	pData = &data;
 	return S_OK;
 }
@@ -1035,41 +1035,6 @@ HRESULT CSampleGrabber::ProcessOutput(
 	// Queue the audio frame in the analyzer buffer
 	hr = m_Analyzer.AppendInput(m_pSample.Get());
 	BeginAnalysis();
-
-	//TODO: move this into the 
-
-	 //Get the input buffer.
-	Microsoft::WRL::ComPtr<IMFMediaBuffer> pInput;
-
-	hr = m_pSample->ConvertToContiguousBuffer(&pInput);
-	if (FAILED(hr))
-	{
-		return hr;
-	}  
-
-	DWORD currentLengthIn(0);
-	DWORD maxLengthIn(0);
-	DWORD currentLengthOut(0);
-	DWORD maxLengthOut(0);
-
-	BYTE* pInputBytes = nullptr;
-	BYTE* pOutputBytes = nullptr;
-
-	hr = pInput->Lock(&pInputBytes, &maxLengthIn, &currentLengthIn);
-	if (FAILED(hr))
-	{
-	return hr;
-	}
-
-	DirectX::XMVECTOR* vectorInputBuffer = (DirectX::XMVECTOR*)_aligned_malloc(currentLengthIn/4 * sizeof(DirectX::XMVECTOR), 16);
-
-	for (int i = 0; i < currentLengthIn/4; i++) {
-		vectorInputBuffer[i] = DirectX::XMLoadFloat((float*)(pInputBytes + (i*4)));
-	}
-
-	_aligned_free(vectorInputBuffer);
-
-
 
 #pragma endregion
 

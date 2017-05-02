@@ -44,6 +44,12 @@ using namespace Microsoft::WRL::Wrappers;
 #define APP_SETLOGFSCALE L"App_SetLogFScale"
 #define APP_SETLINEARSCALE L"App_SetLinearScale"
 
+#ifdef _WIN32
+#define AddPtrField(fields,name,ptr) fields->AddUInt32WithFormat(HStringReference(name).Get(),(UINT32)ptr,LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+#endif
+#ifdef _WIN64
+#define AddPtrField(fields,name,ptr) fields->AddUInt64WithFormat(HStringReference(name).Get(),(UINT64)ptr,LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
+#endif
 
 ComPtr<ILoggingTarget> Trace::g_spLogChannel;
 
@@ -218,19 +224,6 @@ HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILogging
 	return g_spLogChannel->StartActivityWithFields(HStringReference(APP_GETFRAME).Get(), fields.Get(), ppActivity);
 }
 
-HRESULT Trace::Log_TestFrame(REFERENCE_TIME currentTime, REFERENCE_TIME start, REFERENCE_TIME duration)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { currentTime });
-	fields->AddTimeSpan(HStringReference(L"Start").Get(), ABI::Windows::Foundation::TimeSpan() = { start });
-	fields->AddTimeSpan(HStringReference(L"End").Get(), ABI::Windows::Foundation::TimeSpan() = { start + duration });
-
-	return g_spLogChannel->LogEventWithFields(HStringReference(APP_GF_TESTFRAME).Get(), fields.Get());
-}
-
 HRESULT Trace::Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration)
 {
 	ComPtr<ILoggingFields> fields;
@@ -320,77 +313,6 @@ HRESULT Trace::Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::I
 	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
 
 	return g_spLogChannel->StartActivityWithFields(HStringReference(QO_PUSH).Get(), fields.Get(), ppActivity);
-}
-
-HRESULT Trace::Log_OutputQueuePop(REFERENCE_TIME time, REFERENCE_TIME duration, size_t queueSize)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
-	fields->AddTimeSpan(HStringReference(L"Duration").Get(), ABI::Windows::Foundation::TimeSpan() = { duration });
-	fields->AddUInt32(HStringReference(L"QueueSize").Get(), queueSize);
-
-	return g_spLogChannel->LogEventWithFields(HStringReference(QO_POP).Get(), fields.Get());
-}
-
-HRESULT Trace::Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME expected)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
-	fields->AddTimeSpan(HStringReference(L"Expected").Get(), ABI::Windows::Foundation::TimeSpan() = { expected });
-
-	return g_spLogChannel->LogEventWithFields(HStringReference(QO_DISCONTINUITY).Get(), fields.Get());
-}
-
-
-HRESULT Trace::Log_LockInputBuffer(IMFMediaBuffer * pBuffer)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	if (pBuffer != nullptr)
-	{
-		DWORD dwLength = 0, dwMaxLength = 0;
-		pBuffer->GetCurrentLength(&dwLength);
-		pBuffer->GetMaxLength(&dwMaxLength);
-		fields->AddUInt32(HStringReference(L"Samples").Get(), dwLength / sizeof(float));
-		fields->AddUInt32(HStringReference(L"MaxSamples").Get(), dwMaxLength / sizeof(float));
-		fields->AddUInt32WithFormat(HStringReference(L"Ptr").Get(), (UINT32)pBuffer, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
-
-	}
-	else
-	{
-		fields->AddEmpty(HStringReference(L"Samples").Get());
-		fields->AddEmpty(HStringReference(L"MaxSamples").Get());
-	}
-
-	return g_spLogChannel->LogEventWithFields(HStringReference(ANALYZER_LOCK_INPUT_BUFFER).Get(), fields.Get());
-}
-
-HRESULT Trace::Log_SetCopiedFrameTime(REFERENCE_TIME time)
-{
-	ComPtr<ILoggingFields> fields;
-	HRESULT hr = CreateLoggingFields(&fields);
-	if (FAILED(hr))
-		return hr;
-
-	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
-
-	return g_spLogChannel->LogEventWithFields(HStringReference(ANALYZER_SET_FRAME_TIME).Get(), fields.Get());
-}
-
-HRESULT Trace::Log_CopyNextSample()
-{
-	return g_spLogChannel->LogEvent(HStringReference(ANALYZER_COPY_NEXT_SAMPLE).Get());
 }
 
 HRESULT Trace::Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, 
