@@ -39,7 +39,7 @@ class CSpectrumAnalyzer
 		}
 	};
 	
-	const size_t cRingBufferSize = 48000 * 2 * 5;	// Allow 5 seconds of stereo data
+	static const size_t cRingBufferSizeInSeconds = 30;	
 
 private:
 	unsigned m_AudioChannels;
@@ -50,7 +50,7 @@ private:
 	unsigned m_FFTLength;
 	unsigned m_FFTLengthPow2;	// FFT length expressed as power of 2
 
-	buffers::ring_buffer<float, 480000u> m_InputBuffer;		// Allocate 5 seconds stereo for 48kHz rate
+	buffers::ring_buffer<float, cRingBufferSizeInSeconds * 48000 * 2> m_InputBuffer;	
 
 	Microsoft::WRL::Wrappers::CriticalSection m_csReadPtr;
 
