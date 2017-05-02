@@ -30,7 +30,7 @@ namespace SampleGrabber
 
 		HRESULT Configure([in] float outSampleRate,[in] float overlapPercent,[in] unsigned long fftLength);
 		HRESULT SetLogFScale([in] float lowFrequency, [in] float highFrequency, [in] unsigned long numberOfBins);
-		HRESULT SetLinearFScale();
+		HRESULT SetLinearFScale([in] unsigned long numberOfBins);
 
 		[propget] HRESULT IsLogFrequencyScale([out][retval] boolean *result);
 		[propget] HRESULT LowFrequency([out][retval] float *result);
@@ -41,7 +41,7 @@ namespace SampleGrabber
 
 	};
 
-	[version(NTDDI_WIN8)]
+	[version(NTDDI_WIN10)]
 	runtimeclass SampleGrabberTransform
 	{
 		[default]interface Windows.Media.IMediaExtension;

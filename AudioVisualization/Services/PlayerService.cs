@@ -65,7 +65,8 @@ namespace AudioVisualization.Services
                     // Configure the analyzer
                     SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
                     mft.Configure(60.0f, 0.5f, 2048);       // 60fps output, 50% overlap in frames and use 2048 fft
-                    mft.SetLogFScale(20.0f, 20000f, 800);   // Output data in logarithmic scale, from 20Hz-20kHz, 800 points per channel
+                    //mft.SetLogFScale(20.0f, 20000f, 800);   // Output data in logarithmic scale, from 20Hz-20kHz, 800 points per channel
+                    mft.SetLinearFScale(50);
 
                     // Debug.WriteLine(customStruct.Value);
                     //TODO get a ringbuffer interface

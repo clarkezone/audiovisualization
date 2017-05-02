@@ -18,7 +18,7 @@ CSampleGrabber::CSampleGrabber() :
 	m_ExpectedFrameOffset(-1)
 {
 	Trace::Initialize();
-	SetLinearFScale();
+	SetLinearFScale(m_FFTLength/2);
 	m_Analyzer.SetLogAmplitudeScale(-100.0f, 100.0f);
 	TRACE(L"construct");
 	m_hWQAccess = CreateSemaphore(nullptr, 1, 1, nullptr);
@@ -1193,14 +1193,14 @@ STDMETHODIMP CSampleGrabber::SetLogFScale(float lowFrequency, float highFrequenc
 	m_Analyzer.SetLogFScale(m_fLowFrequency, m_fHighFrequency, m_FrequencyBins);
 	return S_OK;
 }
-STDMETHODIMP CSampleGrabber::SetLinearFScale()
+STDMETHODIMP CSampleGrabber::SetLinearFScale(unsigned long numberOfBins)
 {
 	Trace::Log_SetLinearScale();
 	m_bIsLogFScale = false;
 	m_fLowFrequency = 0.0f;
 	m_fHighFrequency = (float) (m_InputSampleRate >> 1);
-	m_FrequencyBins = m_FFTLength >> 1;
-	m_fFrequencyStep = (float) m_InputSampleRate / (float) m_FFTLength;
-	m_Analyzer.SetLinearFScale();
+	m_FrequencyBins = numberOfBins == 0 ? m_FFTLength >> 1 : numberOfBins;
+	m_fFrequencyStep = (float) m_InputSampleRate / (float) 2*m_FrequencyBins;
+	m_Analyzer.SetLinearFScale(m_FrequencyBins);
 	return S_OK;
 }

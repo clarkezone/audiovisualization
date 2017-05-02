@@ -77,7 +77,7 @@ public:
 
 	STDMETHODIMP Configure(float outputSampleRate, float overlapPercent, unsigned long fftLength);
 	STDMETHODIMP SetLogFScale(float lowFrequency, float highFrequency, unsigned long numberOfBins);
-	STDMETHODIMP SetLinearFScale();
+	STDMETHODIMP SetLinearFScale(unsigned long numberOfBins);
 	STDMETHODIMP get_IsLogFrequencyScale(boolean *pResult)
 	{
 		if (pResult == nullptr)

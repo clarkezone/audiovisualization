@@ -160,7 +160,7 @@ namespace AudioVisualization.Controls.Visualizers
                     {
                         using (var data = dataFrame.AsVisualizationData())
                         {
-                            DrawVU(ds, data[data.Length - 8], data[data.Length - 7]);
+                            DrawVU(ds, data.GetRMS(0), data.GetRMS(1));
                             DrawSpectrogram(data, ds);
                         }
                         dataFrame.Dispose();
@@ -233,45 +233,38 @@ namespace AudioVisualization.Controls.Visualizers
 
         private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds)
         {
-            // Spectral data drawn in boxes 200,20 - 1000,220 & 200,240-1000,440
             // Draw grid
-            ds.DrawRectangle(200, 20, 800, 200, Colors.Black);
-            ds.DrawRectangle(200, 240, 800, 200, Colors.Black);
-            for (int db = 0; db >= -80; db -= 20)
+
+            ds.DrawRectangle(200, 25, 800, 200, Colors.Gray);
+            ds.DrawRectangle(200, 250, 800, 200, Colors.Gray);
+
+            for (int x = 0; x < 800; x+=16)
             {
-                ds.DrawLine(200.0f, 20.0f - db * 2, 1000.0f, 20.0f - db * 2, Colors.LightGray);
-                ds.DrawLine(200.0f, 440f + db * 2, 1000.0f, 440f + db * 2, Colors.LightGray);
+                ds.DrawLine(x+200, 25, x+200, 225, Colors.LightGray);
+                ds.DrawLine(x+200, 250, x+200, 450, Colors.LightGray);
             }
 
-            CanvasTextFormat textFormat = new CanvasTextFormat();
-            textFormat.FontSize = 9;
-            textFormat.HorizontalAlignment = CanvasHorizontalAlignment.Center;
-            textFormat.VerticalAlignment = CanvasVerticalAlignment.Top;
-
-            foreach (float f in new float[] { 20.0f, 32.0f, 50.0f, 75.0f, 100.0f, 150.0f, 200.0f, 320.0f, 500.0f, 750.0f, 1000.0f, 1500.0f, 2000.0f, 3200.0f, 5000.0f, 7500.0f, 10000.0f, 15000.0f, 20000.0f })
+            for (int y=0;y<200;y+=20)
             {
-                float x = 200 + 800.0f * (float)Math.Log10(f / 20.0) / 3.0f;
-                ds.DrawLine(x, 20, x, 220, Colors.LightGray);
-                ds.DrawLine(x, 240, x, 440, Colors.LightGray);
-
-                string text = f >= 1000.0f ? $"{f / 1000.0}k" : $"{f}";
-                ds.DrawText(text, x, 225, Colors.Black, textFormat);
-                ds.DrawText(text, x, 445, Colors.Black, textFormat);
+                ds.DrawLine(200, y + 25, 1000, y + 25, Colors.LightGray);
+                ds.DrawLine(200, y + 250, 1000, y + 250, Colors.LightGray);
             }
 
             if (data == null)
                 return;
 
-            uint elementCount = (data.Length - 8) / 2;
-
-            if (elementCount != 800)
+            if (data.Length != 112)
                 return;
 
-            for (uint i = 0; i < 800; i++)
+            // Draw 50 bars of width 16 pixels
+            for (uint i = 0; i < 50; i++)
             {
-                float xPos = i + 200;
-                ds.DrawLine(xPos, 20 - 2 * data[i], xPos, 212, Colors.Orange);
-                ds.DrawLine(xPos, 240, xPos, (240 + 200) + 2 * data[i + elementCount], Colors.Green);
+                float xPos = i * 16 + 200;
+                float leftHeight = 2*data[data.GetChannelOffset(0) + i]+200;
+                ds.FillRectangle(xPos, 225 - leftHeight, 16, leftHeight, Colors.Orange);
+
+                float rightHeight = 2*data[data.GetChannelOffset(1) + i] + 200;
+                ds.FillRectangle(xPos, 250, 16, rightHeight, Colors.LimeGreen);
             }
         }
 

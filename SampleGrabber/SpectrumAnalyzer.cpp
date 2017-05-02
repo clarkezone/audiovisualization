@@ -23,7 +23,7 @@ CSpectrumAnalyzer::CSpectrumAnalyzer() :
 	m_bUseLogFScale(false),
 	m_fLogMin(20.0f),
 	m_fLogMax(20000.f),
-	m_logElementsCount(200),
+	m_OutElementsCount(200),
 	m_bUseLogAmpScale(false),
 	m_vClampAmpLow(DirectX::XMVectorReplicate(std::numeric_limits<float>::min())),
 	m_vClampAmpHigh(DirectX::XMVectorReplicate(std::numeric_limits<float>::min()))
@@ -210,8 +210,7 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 
 	// Create aligned buffer for vector math + 16 bytes for 8 floats for RMS values
 	// In linear output length is going to be 1/2 of the FFT length
-	size_t outputLength = m_bUseLogFScale ? m_logElementsCount : m_FFTLength >> 1;
-	size_t vOutputLength = (outputLength + 3) >> 2;		// To use vector math allocate buffer for each channel which is rounded up to the next 16 byte boundary
+	size_t vOutputLength = (m_OutElementsCount + 3) >> 2;		// To use vector math allocate buffer for each channel which is rounded up to the next 16 byte boundary
 	hr = MFCreateAlignedMemoryBuffer((sizeof(XMVECTOR)*vOutputLength*m_AudioChannels) + 2 * sizeof(XMVECTOR), 16, &spBuffer);
 	if (FAILED(hr))
 		return hr;
@@ -236,14 +235,15 @@ HRESULT CSpectrumAnalyzer::Step(IMFSample **ppSample)
 		float *pOutData = pBufferData + channelIndex * (vOutputLength << 2);
 
 		DirectX::XMVECTOR *pFftData = m_pFftReal + channelIndex * (m_FFTLength >> 2);
+		CalculateFft(pFftData, pFftData, pRMSData + channelIndex, m_pFftBuffers);
+
 		if (m_bUseLogFScale)
 		{
-			CalculateFft(pFftData, pFftData, pRMSData + channelIndex, m_pFftBuffers);
-			mapToLogScale((float *)pFftData, m_FFTLength >> 1, pOutData, m_logElementsCount, fromFreq, toFreq);
+			mapToLogScale((float *)pFftData, m_FFTLength >> 1, pOutData, m_OutElementsCount, fromFreq, toFreq);
 		}
 		else
 		{
-			CalculateFft(pFftData, (XMVECTOR *)pOutData, pRMSData + channelIndex, m_pFftBuffers);
+			mapToLinearScale((float *)pFftData, m_FFTLength >> 1, pOutData, m_OutElementsCount);
 		}
 	}
 	// Scale the output value, we can use vector math as there is space after the buffer and it is aligned
@@ -356,10 +356,11 @@ void CSpectrumAnalyzer::Reset()
 }
 
 
-void CSpectrumAnalyzer::SetLinearFScale()
+void CSpectrumAnalyzer::SetLinearFScale(size_t numberOfBins)
 {
 	auto lock = m_csConfigAccess.Lock();	// Lock object for config changes
 	m_bUseLogFScale = false;
+	m_OutElementsCount = numberOfBins;
 }
 
 void CSpectrumAnalyzer::SetLogAmplitudeScale(float clampToLow, float clampToHigh)
@@ -384,6 +385,6 @@ void CSpectrumAnalyzer::SetLogFScale(float lowFrequency, float highFrequency, si
 	m_bUseLogFScale = true;
 	m_fLogMin = lowFrequency;
 	m_fLogMax = highFrequency;
-	m_logElementsCount = binCount;
+	m_OutElementsCount = binCount;
 }
 

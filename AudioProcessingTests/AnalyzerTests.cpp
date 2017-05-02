@@ -459,7 +459,7 @@ namespace AudioProcessingTests
 			using namespace ABI::Windows::Media;
 			size_t fftLen = 4096;
 			pAnalyzer->Configure(60.0, 0, fftLen);
-			pAnalyzer->SetLinearFScale();
+			pAnalyzer->SetLinearFScale(fftLen);
 			// Generate a series of signal pulses in left and right channels with period of 1/60
 			// |----|              |----|
 			// |    |----|    |----|    |
@@ -533,7 +533,7 @@ namespace AudioProcessingTests
 			Create_And_Assign_Clock(&spFakeClock, spTransform.Get());
 
 			HRESULT hr = spAnalyzerOut->Configure(outputFrameRate, 0.5f, fftLength);
-			hr = spAnalyzerOut->SetLinearFScale();
+			hr = spAnalyzerOut->SetLinearFScale(fftLength/2);
 
 			CGenerator g(sampleRate, channels);
 
@@ -569,7 +569,7 @@ namespace AudioProcessingTests
 				expectedTimes,
 				expectedFrameDuration);
 
-			size_t expectedOutput = (size_t) sampleRate / outputFrameRate;
+			size_t expectedOutput = (size_t) (sampleRate / outputFrameRate);
 			Test_Zero_Levels(spAnalyzerOut.Get(), fftLength, channels);
 
 			Test_GetFrame_Continuity(spAnalyzerOut.Get(), spFakeClock.Get(), setPresentationTimes[3], expectedFrameDuration);

@@ -30,6 +30,36 @@ public:
 	}
 };
 
+template<class T> HRESULT mapToLinearScale(const T *pInput, size_t inputSize, T *pOutput, size_t outputSize)
+{
+	if (outputSize > inputSize)
+		return E_INVALIDARG;
+
+	T inStep = inputSize / outputSize;
+	T inIndex = 0;
+	T nextInIndex = inIndex + inStep;
+	T scaler = 1 / inStep;
+
+	for (size_t outIndex = 0; outIndex < outputSize; outIndex++)
+	{
+		int inValueIntIndex = (int)floor(inIndex);
+		int inValueIntNextIndex = (int)floor(nextInIndex);
+
+		T sum = 0;
+		for (int index = inValueIntIndex + 1; index < inValueIntNextIndex && index < (int)inputSize; index++)
+		{
+			sum += pInput[index];
+		}
+		sum += pInput[inValueIntIndex] * (1 - inIndex + (T) inValueIntIndex);
+		if(inValueIntNextIndex < (int) inputSize)
+			sum += pInput[inValueIntNextIndex] * (nextInIndex - (T) inValueIntNextIndex);
+		pOutput[outIndex] = sum * scaler;
+
+		inIndex = nextInIndex;
+		nextInIndex = inIndex + inStep;
+	}
+}
+
 // Map input array to logarithmic distribution into output, starting from outMin value to outMax (as indexes into input array) 
 template<class T> HRESULT mapToLogScale(const T *pInput, size_t inputSize, T *pOutput, size_t outputSize, T outMin, T outMax)
 {
