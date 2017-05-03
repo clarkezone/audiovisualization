@@ -17,11 +17,14 @@
     <ClCompile Include="UnitTest.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="MFHelpers.cpp" />
+    <ClCompile Include="AnalyzerTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="UnitTestApp.xaml.h" />
     <ClInclude Include="MFHelpers.h" />
+    <ClInclude Include="FakeClock.h" />
+    <ClInclude Include="SignalGenerator.h" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="UnitTestApp.rd.xml" />

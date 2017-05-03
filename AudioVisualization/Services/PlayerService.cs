@@ -3,6 +3,7 @@ using Windows.Media.Playback;
 using Windows.Foundation.Collections;
 using System.Diagnostics;
 using AudioVisualization.Controls.Visualizers;
+using AudioVisualization.Extensions;
 
 namespace AudioVisualization.Services
 {
@@ -56,15 +57,18 @@ namespace AudioVisualization.Services
 
             // filter property set is ready after opening on the next paused
 
+
             if (sender.CurrentState == MediaPlayerState.Playing)
             {
                 if (_referenceProperties.ContainsKey("samplegrabber"))
                 {
-                    SampleGrabber.IMyInterface call = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
+                    // Configure the analyzer
+                    SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
+                    mft.Configure(60.0f, 0.5f, 2048);       // 60fps output, 50% overlap in frames and use 2048 fft
+                    //mft.SetLogFScale(20.0f, 20000f, 800);   // Output data in logarithmic scale, from 20Hz-20kHz, 800 points per channel
+                    mft.SetLinearFScale(50);
 
-                    var customStruct = call?.GetSingleData();
-
-                    Debug.WriteLine(customStruct.Value);
+                    // Debug.WriteLine(customStruct.Value);
                     //TODO get a ringbuffer interface
                 }
             }

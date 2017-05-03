@@ -17,13 +17,45 @@
 #include "DirectXMath.h"
 #include <malloc.h>
 #include "MFHelpers.h"
+#include "SpectrumAnalyzer.h"
+#include <queue>
+#include <mutex>
+#include <concurrent_queue.h>
+#include "AsyncCallback.h"
 
 class CSampleGrabber
 	: public Microsoft::WRL::RuntimeClass<
 	Microsoft::WRL::RuntimeClassFlags< Microsoft::WRL::RuntimeClassType::WinRtClassicComMix >,
 	ABI::Windows::Media::IMediaExtension, ABI::SampleGrabber::IMyInterface,
-	IMFTransform >
+	IMFTransform,IMFClockConsumer >
 {
+	struct sample_queue_item
+	{
+	public:
+		Microsoft::WRL::ComPtr<IMFSample> sample;
+		REFERENCE_TIME time;
+		REFERENCE_TIME duration;
+		sample_queue_item()
+		{
+			time = 0;
+			duration = 0;
+		}
+		sample_queue_item(IMFSample *pSample)
+		{
+			sample = pSample;
+			if (pSample != nullptr)
+			{
+				pSample->GetSampleTime(&time);
+				pSample->GetSampleDuration(&duration);
+			}
+			else
+			{
+				time = 0;
+				duration = 0;
+			}
+		}
+	};
+
 	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)
 
 public:
@@ -36,9 +68,67 @@ public:
 	// IMediaExtension
 	STDMETHODIMP SetProperties(ABI::Windows::Foundation::Collections::IPropertySet *pConfiguration);
 
+	// IMyInterface
 	STDMETHODIMP GetVector(ABI::Windows::Foundation::Collections::IVectorView<ABI::SampleGrabber::Data> **pConfiguration);
 
 	STDMETHODIMP GetSingleData(ABI::SampleGrabber::Data* result);
+
+	STDMETHODIMP GetFrame(ABI::Windows::Media::IAudioFrame **pResult);
+
+	STDMETHODIMP Configure(float outputSampleRate, float overlapPercent, unsigned long fftLength);
+	STDMETHODIMP SetLogFScale(float lowFrequency, float highFrequency, unsigned long numberOfBins);
+	STDMETHODIMP SetLinearFScale(unsigned long numberOfBins);
+	STDMETHODIMP get_IsLogFrequencyScale(boolean *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_bIsLogFScale;
+		return S_OK;
+	}
+
+	STDMETHODIMP get_LowFrequency(float *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_fLowFrequency;
+		return S_OK;
+	}
+	STDMETHODIMP get_HighFrequency(float *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_fHighFrequency;
+		return S_OK;
+	}
+	STDMETHODIMP get_FrequencyStep(float *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_fFrequencyStep;
+		return S_OK;
+	}
+	STDMETHODIMP get_Channels(unsigned long *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_Channels;
+		return S_OK;
+	}
+	STDMETHODIMP get_FrequencyBinCount(unsigned long *pResult)
+	{
+		if (pResult == nullptr)
+			return E_FAIL;
+
+		*pResult = m_FFTLength;
+		return S_OK;
+	}
+
+
 
 	// IMFTransform
 	STDMETHODIMP GetStreamLimits(
@@ -158,7 +248,29 @@ public:
 		DWORD                   *pdwStatus
 		);
 
+	HRESULT STDMETHODCALLTYPE SetPresentationClock(_In_opt_ IMFPresentationClock *pPresentationClock) 
+	{
+		m_spPresentationClock = pPresentationClock;
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE GetPresentationClock(_COM_Outptr_opt_result_maybenull_ IMFPresentationClock **pPresentationClock) 
+	{
+		return E_NOTIMPL;
+	}
+
 private:
+	// Analyzer configuration
+	float m_fOutputSampleRate;
+	float m_fSampleOverlapPercentage;
+	bool m_bIsLogFScale;
+	float m_fLowFrequency;
+	float m_fHighFrequency;
+	float m_fFrequencyStep;
+	unsigned m_FrequencyBins;
+	unsigned m_Channels;
+	unsigned m_FFTLength;
+	unsigned m_InputSampleRate;
+
 	Microsoft::WRL::ComPtr<IMFAttributes>		m_pAttributes;
 	Microsoft::WRL::ComPtr<IMFMediaType>		m_pInputType;              // Input media type.
 	Microsoft::WRL::ComPtr<IMFMediaType>		m_pOutputType;             // Output media type.
@@ -166,10 +278,21 @@ private:
 	Microsoft::WRL::ComPtr<IMFSample>			m_pSample;
 	Microsoft::WRL::ComPtr <IMFMediaType>		m_pMediaType;
 	bool										m_bStreamingInitialized;
+	Microsoft::WRL::ComPtr<IMFPresentationClock>	m_spPresentationClock;
 	HRESULT BeginStreaming();
 	HRESULT EndStreaming();
 	HRESULT OnFlush();
 
+	CSpectrumAnalyzer			m_Analyzer;
 
+	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
+	//std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
+	concurrency::concurrent_queue<sample_queue_item> m_AnalyzerOutput;
+	long m_ExpectedFrameOffset;
+	HANDLE m_hWQAccess;	
+	AsyncCallback<CSampleGrabber> m_AnalysisStepCallback;
+	HRESULT BeginAnalysis();
+	HRESULT ConfigureAnalyzer();
+	HRESULT OnAnalysisStep(IMFAsyncResult *pResult);
 };
 

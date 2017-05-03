@@ -13,6 +13,7 @@ using AudioVisualization.Services;
 using System.Diagnostics;
 using System.Collections.Generic;
 using Microsoft.Graphics.Canvas.Text;
+using AudioVisualization.Extensions;
 
 namespace AudioVisualization.Controls.Visualizers
 {
@@ -28,6 +29,14 @@ namespace AudioVisualization.Controls.Visualizers
 
         public Win2DVisualizer()
         {
+            // Assume here stereo audio
+            m_VolumeData = new float[2] { -100.0f, -100.0f };
+            m_PeakVolumeData = new float[2] { -100.0f, -100.0f };
+
+            // Assume stereo with 800 data points, 10 times less for peak data
+            m_SpectralData = new float[][] { new float[800], new float[800] };
+            m_SpectralPeakData = new float[][] { new float[80], new float[800] };
+
             CreateDevice();
             _swapChainVisual = _compositor.CreateSpriteVisual();
             _rootVisual.Children.InsertAtTop(_swapChainVisual);
@@ -124,6 +133,15 @@ namespace AudioVisualization.Controls.Visualizers
         double[] leftCurrent;
         double[] rightCurrent;
 
+        float[][] m_SpectralData;
+        float[][] m_SpectralPeakData;
+        float[] m_VolumeData;
+        float[] m_PeakVolumeData;
+        const float meterRiseTime = 0.9f;           // Every 1/60 frame rise 90% of the diff value
+        const float meterFallTime = 0.3f;
+        const float peakMeterRiseTime = 1.0f;       // Fast rise
+        const float peakMeterFallTime = 0.003f;     // Slow fall time
+
         void DrawSwapChain(CanvasSwapChain swapChain)
         {
             using (var ds = swapChain.CreateDrawingSession(Colors.Transparent))
@@ -133,63 +151,121 @@ namespace AudioVisualization.Controls.Visualizers
 
                 var center = size / 2;
 
-                // yuck
-                //lock (PassthroughEffect.GetBadLock())
+                if (PlayerService.Current.ReferencePropertySet?.ContainsKey("samplegrabber") == true)
                 {
-                    if (PlayerService.Current.ReferencePropertySet != null &&
-                        PlayerService.Current.ReferencePropertySet.ContainsKey("dataQueue") &&
-                        this.dataQueue == null)
+                    SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)PlayerService.Current.ReferencePropertySet["samplegrabber"];
+
+                    var dataFrame = mft.GetFrame();
+                    if (dataFrame != null)
                     {
-                        this.dataQueue = PlayerService.Current.ReferencePropertySet["dataQueue"] as Queue<Tuple<double, double>>;
+                        using (var data = dataFrame.AsVisualizationData())
+                        {
+                            DrawVU(ds, data.GetRMS(0), data.GetRMS(1));
+                            DrawSpectrogram(data, ds);
+                        }
+                        dataFrame.Dispose();
+                    }
+                    else
+                    {                        
+                        DrawVU(ds, -100.0f, -100.0f);
+                        DrawSpectrogram(null, ds);
+                    }
+                    // yuck
+                    //lock (PassthroughEffect.GetBadLock())
+                    /*
+                    {
+                        if (PlayerService.Current.ReferencePropertySet != null &&
+                            PlayerService.Current.ReferencePropertySet.ContainsKey("dataQueue") &&
+                            this.dataQueue == null)
+                        {
+                            this.dataQueue = PlayerService.Current.ReferencePropertySet["dataQueue"] as Queue<Tuple<double, double>>;
+                        }
+
+                        if (this.dataQueue != null && !hasNextValue && this.dataQueue.Count>0)
+                        {
+                            nextvalue = this.dataQueue.Dequeue();
+                            hasNextValue = true;
+                        } else if (this.dataQueue != null && this.dataQueue.Count == 0)
+                        {
+                            hasNextValue = false;
+
+                        }
                     }
 
-                    if (this.dataQueue != null && !hasNextValue && this.dataQueue.Count>0)
+                    if (dataQueue != null)
                     {
-                        nextvalue = this.dataQueue.Dequeue();
-                        hasNextValue = true;
-                    } else if (this.dataQueue != null && this.dataQueue.Count == 0)
+                        Debug.WriteLine(dataQueue.Count);
+                    }
+
+                    if (!weAreVisualizing && hasNextValue)
                     {
+                        weAreVisualizing = true;
+                        delayStart = true;
+                    }
+
+                    if (weAreVisualizing && delayStart && delayCurrent < delayTotal)
+                    {
+                        delayCurrent++;
+                    }
+                    else
+                    {
+                        delayStart = false;
+                        delayCurrent = 0;
+                    }
+
+                    if (weAreVisualizing && delayStart)
+                    {
+                        DrawVU(ds, -100, -100);
+                    } else if (weAreVisualizing && !delayStart && nextvalue != null)
+                    {
+                        DrawVU(ds, nextvalue.Item1, nextvalue.Item2);
                         hasNextValue = false;
-
-                    }
+                    } else
+                    {
+                        Debug.WriteLine("miss");
+                        DrawVU(ds, -100, -100);
+                    }*/
                 }
 
-                if (dataQueue != null)
-                {
-                    Debug.WriteLine(dataQueue.Count);
-                }
+                swapChain.Present();
+            }
+        }
 
-                if (!weAreVisualizing && hasNextValue)
-                {
-                    weAreVisualizing = true;
-                    delayStart = true;
-                }
+        private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds)
+        {
+            // Draw grid
 
-                if (weAreVisualizing && delayStart && delayCurrent < delayTotal)
-                {
-                    delayCurrent++;
-                }
-                else
-                {
-                    delayStart = false;
-                    delayCurrent = 0;
-                }
+            ds.DrawRectangle(200, 25, 800, 200, Colors.Gray);
+            ds.DrawRectangle(200, 250, 800, 200, Colors.Gray);
 
-                if (weAreVisualizing && delayStart)
-                {
-                    DrawVU(ds, -100, -100);
-                } else if (weAreVisualizing && !delayStart && nextvalue != null)
-                {
-                    DrawVU(ds, nextvalue.Item1, nextvalue.Item2);
-                    hasNextValue = false;
-                } else
-                {
-                    Debug.WriteLine("miss");
-                    DrawVU(ds, -100, -100);
-                }
+            for (int x = 0; x < 800; x+=16)
+            {
+                ds.DrawLine(x+200, 25, x+200, 225, Colors.LightGray);
+                ds.DrawLine(x+200, 250, x+200, 450, Colors.LightGray);
             }
 
-            swapChain.Present();
+            for (int y=0;y<200;y+=20)
+            {
+                ds.DrawLine(200, y + 25, 1000, y + 25, Colors.LightGray);
+                ds.DrawLine(200, y + 250, 1000, y + 250, Colors.LightGray);
+            }
+
+            if (data == null)
+                return;
+
+            if (data.Length != 112)
+                return;
+
+            // Draw 50 bars of width 16 pixels
+            for (uint i = 0; i < 50; i++)
+            {
+                float xPos = i * 16 + 200;
+                float leftHeight = 2*data[data.GetChannelOffset(0) + i]+200;
+                ds.FillRectangle(xPos, 225 - leftHeight, 16, leftHeight, Colors.Orange);
+
+                float rightHeight = 2*data[data.GetChannelOffset(1) + i] + 200;
+                ds.FillRectangle(xPos, 250, 16, rightHeight, Colors.LimeGreen);
+            }
         }
 
         private bool hasNextValue;
@@ -200,7 +276,7 @@ namespace AudioVisualization.Controls.Visualizers
         private bool delayStart = false;
         private bool weAreVisualizing = false;
 
-        void DrawVU(CanvasDrawingSession ds, double volumeLeft, double volumeRight)
+        void DrawVU(CanvasDrawingSession ds, float volumeLeft, float volumeRight)
         {
             //TODO: move consts out of here
 
@@ -216,16 +292,32 @@ namespace AudioVisualization.Controls.Visualizers
             const float segmentHeight = 15.0f;
             const float segmentWidth = 50.0f;
 
-            int[] vuValues = { -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0 };
+            float[] vuValues = { -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0 };
             Size segmentSize = new Size(segmentWidth, segmentHeight);
             Point positionLeft = new Point(channelGap * 4, channelGap * 2);
             Point positionRight = new Point(positionLeft.X + segmentWidth + channelGap, positionLeft.Y);
             Rect segmentLeft = new Rect(positionLeft, segmentSize);
             Rect segmentRight = new Rect(positionRight, segmentSize);
 
-            int leftActiveIndex = -1;
-            int rightActiveIndex = -1;
+            // Calculate real VU meter values with rise and fall times
+            m_VolumeData[0] -= (m_VolumeData[0] - volumeLeft) * (m_VolumeData[0] < volumeLeft ? meterRiseTime : meterFallTime);
+            m_VolumeData[1] -= (m_VolumeData[1] - volumeRight) * (m_VolumeData[1] < volumeRight ? meterRiseTime : meterFallTime);
 
+            m_PeakVolumeData[0] -= (m_PeakVolumeData[0] - volumeLeft) * (m_PeakVolumeData[0] < volumeLeft ? peakMeterRiseTime : peakMeterFallTime);
+            m_PeakVolumeData[1] -= (m_PeakVolumeData[1] - volumeRight) * (m_PeakVolumeData[1] < volumeRight ? peakMeterRiseTime : peakMeterFallTime);
+
+            // Match meter values to meter indexes
+            int foundIndex = Array.BinarySearch<float>(vuValues, m_VolumeData[0]);
+            int leftActiveIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+            foundIndex = Array.BinarySearch<float>(vuValues, m_VolumeData[1]);
+            int rightActiveIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+
+            foundIndex = Array.BinarySearch<float>(vuValues, m_PeakVolumeData[0]);
+            int leftPeakIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+            foundIndex = Array.BinarySearch<float>(vuValues, m_PeakVolumeData[1]);
+            int rightPeakIndex = foundIndex != -1 ? (foundIndex < 0 ? ~foundIndex : foundIndex) : -1;
+
+            /* TODO - Remove replaced with Array.BinarySearch above
             bool found = false;
             for (int i = vuValues.Length - 2; i > 1; i--)
             {
@@ -239,7 +331,7 @@ namespace AudioVisualization.Controls.Visualizers
 
             if (!found)
             {
-                Debug.WriteLine("Not found");
+                // Debug.WriteLine("Not found");
             }
 
             for (int i = vuValues.Length - 2; i > 1; i--)
@@ -249,7 +341,7 @@ namespace AudioVisualization.Controls.Visualizers
                     rightActiveIndex = i;
                     break;
                 }
-            }
+            }*/
 
             Color litColor;
             Color unLitColor;
@@ -287,7 +379,7 @@ namespace AudioVisualization.Controls.Visualizers
 
                 segmentLeft = new Rect(positionLeft, segmentSize);
 
-                if (i <= leftActiveIndex)
+                if (i <= leftActiveIndex || i == leftPeakIndex)
                 {
                     ds.FillRectangle(segmentLeft, litColor);
                 }
@@ -299,7 +391,7 @@ namespace AudioVisualization.Controls.Visualizers
 
                 segmentRight = new Rect(positionRight, segmentSize);
 
-                if (i <= rightActiveIndex)
+                if (i <= rightActiveIndex || i == rightPeakIndex)
                 {
                     ds.FillRectangle(segmentRight, litColor);
                 }

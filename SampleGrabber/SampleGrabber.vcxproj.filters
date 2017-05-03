@@ -11,6 +11,8 @@
     <ClCompile Include="SampleGrabber.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="MFHelpers.cpp" />
+    <ClCompile Include="Trace.cpp" />
+    <ClCompile Include="SpectrumAnalyzer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -18,8 +20,18 @@
     <ClInclude Include="XDSP.h" />
     <ClInclude Include="DirectXMath.h" />
     <ClInclude Include="MFHelpers.h" />
+    <ClInclude Include="Trace.h" />
+    <ClInclude Include="SampleGrabber_h.h" />
+    <ClInclude Include="AsyncCallback.h" />
+    <ClInclude Include="SpectrumAnalyzer.h" />
+    <ClInclude Include="cubic_spline.h" />
+    <ClInclude Include="ring_buffer.h" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="SampleGrabber.idl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="SampleGrabber.def" />
+    <None Include="AudioVizualisation.wprp" />
   </ItemGroup>
 </Project>

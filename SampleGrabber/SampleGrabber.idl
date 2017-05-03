@@ -10,7 +10,7 @@ namespace SampleGrabber
 {
 	typedef struct Data Data;
 
-	[version(NTDDI_WIN8)]
+	[version(NTDDI_WIN10)]
 	struct Data {
 		float VariableOne;
 	};
@@ -21,13 +21,27 @@ namespace SampleGrabber
 	}
 
 	[uuid(999d2f3c-f9da-4abd-9103-9d268e41d5b1)]
-	[version(NTDDI_WIN8)]
+	[version(NTDDI_WIN10)]
 	interface IMyInterface : IInspectable {
 		HRESULT GetVector([out][retval] Windows.Foundation.Collections.IVectorView<SampleGrabber.Data>** result);
 		HRESULT GetSingleData([out][retval] SampleGrabber.Data* result);
+
+		HRESULT GetFrame([out][retval] Windows.Media.AudioFrame **result);
+
+		HRESULT Configure([in] float outSampleRate,[in] float overlapPercent,[in] unsigned long fftLength);
+		HRESULT SetLogFScale([in] float lowFrequency, [in] float highFrequency, [in] unsigned long numberOfBins);
+		HRESULT SetLinearFScale([in] unsigned long numberOfBins);
+
+		[propget] HRESULT IsLogFrequencyScale([out][retval] boolean *result);
+		[propget] HRESULT LowFrequency([out][retval] float *result);
+		[propget] HRESULT HighFrequency([out][retval] float *result);
+		[propget] HRESULT FrequencyStep([out][retval] float *result);
+		[propget] HRESULT Channels([out][retval] unsigned long *result);
+		[propget] HRESULT FrequencyBinCount([out][retval] unsigned long *result);
+
 	};
 
-	[version(NTDDI_WIN8)]
+	[version(NTDDI_WIN10)]
 	runtimeclass SampleGrabberTransform
 	{
 		[default]interface Windows.Media.IMediaExtension;
