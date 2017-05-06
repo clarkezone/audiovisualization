@@ -6,7 +6,7 @@
  /* File created by MIDL compiler version 8.01.0622 */
 /* at Tue Jan 19 05:14:07 2038
  */
-/* Compiler settings for C:\Users\tonuv\AppData\Local\Temp\SampleGrabber.idl-f3ae8491:
+/* Compiler settings for C:\Users\tonuv\AppData\Local\Temp\SampleGrabber.idl-319bc1c1:
     Oicf, W1, Zp8, env=Win32 (32b run), target_arch=X86 8.01.0622 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
@@ -887,7 +887,8 @@ EXTERN_C const IID IID___x_ABI_CSampleGrabber_CIMyInterface;
                     /* [in] */ float highFrequency,
                     /* [in] */ unsigned long numberOfBins) = 0;
                 
-                virtual HRESULT STDMETHODCALLTYPE SetLinearFScale( void) = 0;
+                virtual HRESULT STDMETHODCALLTYPE SetLinearFScale( 
+                    /* [in] */ unsigned long numberOfBins) = 0;
                 
                 virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_IsLogFrequencyScale( 
                     /* [out][retval] */ boolean *result) = 0;
@@ -972,7 +973,8 @@ EXTERN_C const IID IID___x_ABI_CSampleGrabber_CIMyInterface;
             /* [in] */ unsigned long numberOfBins);
         
         HRESULT ( STDMETHODCALLTYPE *SetLinearFScale )( 
-            __x_ABI_CSampleGrabber_CIMyInterface * This);
+            __x_ABI_CSampleGrabber_CIMyInterface * This,
+            /* [in] */ unsigned long numberOfBins);
         
         /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_IsLogFrequencyScale )( 
             __x_ABI_CSampleGrabber_CIMyInterface * This,
@@ -1046,8 +1048,8 @@ EXTERN_C const IID IID___x_ABI_CSampleGrabber_CIMyInterface;
 #define __x_ABI_CSampleGrabber_CIMyInterface_SetLogFScale(This,lowFrequency,highFrequency,numberOfBins)	\
     ( (This)->lpVtbl -> SetLogFScale(This,lowFrequency,highFrequency,numberOfBins) ) 
 
-#define __x_ABI_CSampleGrabber_CIMyInterface_SetLinearFScale(This)	\
-    ( (This)->lpVtbl -> SetLinearFScale(This) ) 
+#define __x_ABI_CSampleGrabber_CIMyInterface_SetLinearFScale(This,numberOfBins)	\
+    ( (This)->lpVtbl -> SetLinearFScale(This,numberOfBins) ) 
 
 #define __x_ABI_CSampleGrabber_CIMyInterface_get_IsLogFrequencyScale(This,result)	\
     ( (This)->lpVtbl -> get_IsLogFrequencyScale(This,result) ) 

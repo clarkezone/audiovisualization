@@ -66,7 +66,7 @@ private:
 	bool m_bUseLogFScale;
 	float m_fLogMin;
 	float m_fLogMax;
-	size_t m_logElementsCount;
+	size_t m_OutElementsCount;
 
 	bool m_bUseLogAmpScale;
 	DirectX::XMVECTOR m_vClampAmpLow;
@@ -124,7 +124,7 @@ public:
 	void Reset();
 
 	void SetLogFScale(float lowFrequency, float highFrequency, size_t numberOfBins);
-	void SetLinearFScale();
+	void SetLinearFScale(size_t numberOfBins);
 	void SetLogAmplitudeScale(float clampToLow, float clampToHigh);
 	void SetLinearAmplitudeScale();
 };

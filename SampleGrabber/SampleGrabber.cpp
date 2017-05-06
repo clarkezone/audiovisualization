@@ -18,7 +18,7 @@ CSampleGrabber::CSampleGrabber() :
 	m_ExpectedFrameOffset(-1)
 {
 	Trace::Initialize();
-	SetLinearFScale();
+	SetLinearFScale(m_FFTLength/2);
 	m_Analyzer.SetLogAmplitudeScale(-100.0f, 100.0f);
 	TRACE(L"construct");
 	m_hWQAccess = CreateSemaphore(nullptr, 1, 1, nullptr);
@@ -87,7 +87,7 @@ HRESULT CSampleGrabber::GetVector(ABI::Windows::Foundation::Collections::IVector
 
 HRESULT CSampleGrabber::GetSingleData(ABI::SampleGrabber::Data *pData) {
 	ABI::SampleGrabber::Data data;
-	data.VariableOne = 256.999;
+	data.VariableOne = 256.999f;
 	pData = &data;
 	return S_OK;
 }
@@ -1043,41 +1043,6 @@ HRESULT CSampleGrabber::ProcessOutput(
 	hr = m_Analyzer.AppendInput(m_pSample.Get());
 	BeginAnalysis();
 
-	//TODO: move this into the 
-
-	 //Get the input buffer.
-	Microsoft::WRL::ComPtr<IMFMediaBuffer> pInput;
-
-	hr = m_pSample->ConvertToContiguousBuffer(&pInput);
-	if (FAILED(hr))
-	{
-		return hr;
-	}  
-
-	DWORD currentLengthIn(0);
-	DWORD maxLengthIn(0);
-	DWORD currentLengthOut(0);
-	DWORD maxLengthOut(0);
-
-	BYTE* pInputBytes = nullptr;
-	BYTE* pOutputBytes = nullptr;
-
-	hr = pInput->Lock(&pInputBytes, &maxLengthIn, &currentLengthIn);
-	if (FAILED(hr))
-	{
-	return hr;
-	}
-
-	DirectX::XMVECTOR* vectorInputBuffer = (DirectX::XMVECTOR*)_aligned_malloc(currentLengthIn/4 * sizeof(DirectX::XMVECTOR), 16);
-
-	for (int i = 0; i < currentLengthIn/4; i++) {
-		vectorInputBuffer[i] = DirectX::XMLoadFloat((float*)(pInputBytes + (i*4)));
-	}
-
-	_aligned_free(vectorInputBuffer);
-
-
-
 #pragma endregion
 
 	if (pOutputSamples->pSample != nullptr)
@@ -1235,14 +1200,14 @@ STDMETHODIMP CSampleGrabber::SetLogFScale(float lowFrequency, float highFrequenc
 	m_Analyzer.SetLogFScale(m_fLowFrequency, m_fHighFrequency, m_FrequencyBins);
 	return S_OK;
 }
-STDMETHODIMP CSampleGrabber::SetLinearFScale()
+STDMETHODIMP CSampleGrabber::SetLinearFScale(unsigned long numberOfBins)
 {
 	Trace::Log_SetLinearScale();
 	m_bIsLogFScale = false;
 	m_fLowFrequency = 0.0f;
 	m_fHighFrequency = (float) (m_InputSampleRate >> 1);
-	m_FrequencyBins = m_FFTLength >> 1;
-	m_fFrequencyStep = (float) m_InputSampleRate / (float) m_FFTLength;
-	m_Analyzer.SetLinearFScale();
+	m_FrequencyBins = numberOfBins == 0 ? m_FFTLength >> 1 : numberOfBins;
+	m_fFrequencyStep = (float) m_InputSampleRate / (float) 2*m_FrequencyBins;
+	m_Analyzer.SetLinearFScale(m_FrequencyBins);
 	return S_OK;
 }

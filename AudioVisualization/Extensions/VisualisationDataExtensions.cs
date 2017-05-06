@@ -48,6 +48,7 @@ namespace AudioVisualization.Extensions
         Windows.Foundation.IMemoryBufferReference m_BufferReference;
         unsafe float* m_pData;
         uint m_DataCapacity;
+        uint m_DataStep;
 
         internal unsafe VisualizationData(AudioFrame frame)
         {
@@ -59,9 +60,19 @@ namespace AudioVisualization.Extensions
             ((IMemoryBufferByteAccess)m_BufferReference).GetBuffer(out pData, out capacity);
             m_pData = (float*)pData;
             m_DataCapacity = m_Buffer.Length / sizeof(float);
+
+            m_DataStep = (uint) frame.ExtendedProperties["{3F692E37-FC20-48DD-93D2-2234E1B1AA23}"];
         }
 
+        public uint GetChannelOffset(uint channel) { return m_DataStep * channel; }
+        public uint GetRMSOffset(uint channels) { return m_DataStep * channels; }
+
         public uint Length { get { return m_DataCapacity; } }
+
+        public float GetRMS(uint channel)
+        {
+            return this[GetRMSOffset(2) + channel];
+        }
 
         unsafe public float this[uint index]
         {

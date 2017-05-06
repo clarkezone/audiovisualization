@@ -363,7 +363,7 @@ namespace AudioProcessingTests
 			Sleep(300);	// Sleep for 300ms to allow processing
 
 			// Now simulate the operation
-			REFERENCE_TIME clockStep = (1e7 / outputFrameRate);
+			REFERENCE_TIME clockStep = (REFERENCE_TIME)(1e7 / outputFrameRate);
 			REFERENCE_TIME clock = 1200 + clockStep;	// Some offset
 
 			for (size_t iteration = 0; iteration < 80; iteration++, clock += clockStep)
@@ -459,7 +459,7 @@ namespace AudioProcessingTests
 			using namespace ABI::Windows::Media;
 			size_t fftLen = 4096;
 			pAnalyzer->Configure(60.0, 0, fftLen);
-			pAnalyzer->SetLinearFScale();
+			pAnalyzer->SetLinearFScale(fftLen);
 			// Generate a series of signal pulses in left and right channels with period of 1/60
 			// |----|              |----|
 			// |    |----|    |----|    |
@@ -533,7 +533,7 @@ namespace AudioProcessingTests
 			Create_And_Assign_Clock(&spFakeClock, spTransform.Get());
 
 			HRESULT hr = spAnalyzerOut->Configure(outputFrameRate, 0.5f, fftLength);
-			hr = spAnalyzerOut->SetLinearFScale();
+			hr = spAnalyzerOut->SetLinearFScale(fftLength/2);
 
 			CGenerator g(sampleRate, channels);
 
@@ -569,7 +569,7 @@ namespace AudioProcessingTests
 				expectedTimes,
 				expectedFrameDuration);
 
-			size_t expectedOutput = sampleRate / outputFrameRate;
+			size_t expectedOutput = (size_t) (sampleRate / outputFrameRate);
 			Test_Zero_Levels(spAnalyzerOut.Get(), fftLength, channels);
 
 			Test_GetFrame_Continuity(spAnalyzerOut.Get(), spFakeClock.Get(), setPresentationTimes[3], expectedFrameDuration);
@@ -777,7 +777,7 @@ namespace AudioProcessingTests
 
 			float expected[] = {
 				0.138372749f,0.211934686f,0.329434842f,0.517418683f,
-				0.812474906f,1.01610470f,0.513137400f,-0.191709042,
+				0.812474906f,1.01610470f,0.513137400f,-0.191709042f,
 				0.f,0.f,0.185964912f,0.122723825f };
 
 			for (size_t i = 0; i < output.size(); i++)
@@ -814,7 +814,6 @@ namespace AudioProcessingTests
 			const size_t bufferSize = 4;
 			buffers::ring_buffer<float, bufferSize> buffer;
 			size_t expectedSize = 0;
-			wchar_t szBuffer[1024];
 			for (size_t readerIteration = 0; readerIteration < 5; readerIteration++)
 			{
 				for (size_t writerIteration = 0; writerIteration < 4; writerIteration++)

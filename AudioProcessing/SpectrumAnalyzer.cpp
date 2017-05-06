@@ -247,7 +247,7 @@ namespace AudioProcessing
 			{
 				pReal[fftIndex] = m_pWindow[fftIndex] * m_pInputBuffer[readIndex];
 				readIndex += m_AudioChannels;
-				if (readIndex >= m_StepTotalFrames * m_AudioChannels)	// Wrap the read index over end
+				if ((size_t) readIndex >= m_StepTotalFrames * m_AudioChannels)	// Wrap the read index over end
 					readIndex -= m_StepTotalFrames * m_AudioChannels;
 			}
 			else

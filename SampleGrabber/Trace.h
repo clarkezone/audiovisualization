@@ -39,7 +39,6 @@ public:
 	static HRESULT Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT32 overlap, UINT32 fftLength, HRESULT hConfigureResult);
 	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime,size_t queueSize);
-	static HRESULT Log_TestFrame(REFERENCE_TIME currentTime,REFERENCE_TIME start, REFERENCE_TIME duration);
 	static HRESULT Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration);
 	static HRESULT Log_FrameNotFound();
 	static HRESULT Log_StartAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
@@ -50,8 +49,6 @@ public:
 	static HRESULT Log_SetLogFScale(float lowFrequency, float highFrequency, unsigned outElementCount);
 	static HRESULT Log_SetLinearScale();
 	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
-	static HRESULT Log_OutputQueuePop(REFERENCE_TIME time, REFERENCE_TIME duration, size_t queueSize);
-	static HRESULT Log_OutputQueueDiscontinuity(REFERENCE_TIME time, REFERENCE_TIME expected);
 
 	static HRESULT Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME sampleTime, size_t sampleCount,size_t samplesInBuffer,void *pWritePtr,void *pReadPtr,long inputSampleOffset, long expectedOffset);
 	static HRESULT Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t sampleSize,size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset);
@@ -59,12 +56,6 @@ public:
 
 	static HRESULT Log_StartCopyRBData(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,size_t bufferSize,const void *pReadPtr,const void *pWritePtr);
 	static HRESULT Log_StopCopyRBData(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, bool bSuccess, size_t bufferSize,const void *pReadPtr,const void *pWritePtr);
-
-
-
-	static HRESULT Log_LockInputBuffer(IMFMediaBuffer *pBuffer);
-	static HRESULT Log_SetCopiedFrameTime(REFERENCE_TIME time);
-	static HRESULT Log_CopyNextSample();
 
 	// Func needs to confirm to HRESULT function()
 	template<class Func> inline
