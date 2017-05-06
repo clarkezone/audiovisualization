@@ -1202,7 +1202,7 @@ STDMETHODIMP CSampleGrabber::SetLogFScale(float lowFrequency, float highFrequenc
 }
 STDMETHODIMP CSampleGrabber::SetLinearFScale(unsigned long numberOfBins)
 {
-	Trace::Log_SetLinearScale();
+	Trace::Log_SetLinearScale(numberOfBins);
 	m_bIsLogFScale = false;
 	m_fLowFrequency = 0.0f;
 	m_fHighFrequency = (float) (m_InputSampleRate >> 1);

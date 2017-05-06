@@ -153,13 +153,24 @@ HRESULT CSpectrumAnalyzer::AppendInput(IMFSample * pSample)
 	// Validate that the input data is contiguous
 	// Otherwise empty the buffer, read pointer lock needs to be aquired only when clearing the buffer
 	// Need to allow some sample difference due to rounding errors
+	/*
 	if (labs(sampleOffset - m_ExpectedInputSampleOffset) > 2)
 	{
+		// Get all attributes on sample
+		UINT32 cItems = 0;
+		pSample->GetCount(&cItems);
+		for (size_t index = 0; index < cItems; index++)
+		{
+			GUID guidKey;
+			PROPVARIANT value;
+			pSample->GetItemByIndex(index, &guidKey, &value);
+			int v = 0;
+		}
 		auto lock = m_csReadPtr.Lock();
 		Trace::Log_SA_ClearInputBuffer();
 		m_InputBuffer.clear();
 		m_InputReadPtrSampleIndex = -1;	// Get the index for reader
-	}
+	}*/
 
 	if (m_InputReadPtrSampleIndex == -1)
 		m_InputReadPtrSampleIndex = sampleOffset;	// Set the index for empty buffer

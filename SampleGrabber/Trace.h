@@ -47,7 +47,7 @@ public:
 	static HRESULT Log_AnalysisAlreadyRunning();
 	static HRESULT Log_Configure(float outFrameRate, float overlapPercentage, unsigned fftLength);
 	static HRESULT Log_SetLogFScale(float lowFrequency, float highFrequency, unsigned outElementCount);
-	static HRESULT Log_SetLinearScale();
+	static HRESULT Log_SetLinearScale(size_t numberOfBins);
 	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
 
 	static HRESULT Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME sampleTime, size_t sampleCount,size_t samplesInBuffer,void *pWritePtr,void *pReadPtr,long inputSampleOffset, long expectedOffset);

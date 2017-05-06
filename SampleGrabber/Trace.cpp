@@ -298,9 +298,15 @@ HRESULT Trace::Log_SetLogFScale(float lowFrequency, float highFrequency, unsigne
 	return g_spLogChannel->LogEventWithFields(HStringReference(APP_SETLOGFSCALE).Get(), fields.Get());
 
 }
-HRESULT Trace::Log_SetLinearScale()
+HRESULT Trace::Log_SetLinearScale(size_t bins)
 {
-	return g_spLogChannel->LogEvent(HStringReference(APP_SETLINEARSCALE).Get());
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+
+	fields->AddUInt32(HStringReference(L"NumberOfElements").Get(), bins);
+	return g_spLogChannel->LogEventWithFields(HStringReference(APP_SETLINEARSCALE).Get(),fields.Get());
 }
 
 HRESULT Trace::Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity,REFERENCE_TIME time)
