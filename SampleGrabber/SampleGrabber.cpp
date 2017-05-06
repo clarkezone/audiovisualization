@@ -464,15 +464,15 @@ HRESULT CSampleGrabber::GetInputAvailableType(
 				return hr;
 			}
 
-			//hr = pmt->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
 			hr = pmt->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_Float);
 			if (FAILED(hr))
 			{
 				return hr;
 			}
 		}
-		else if (dwTypeIndex == 1) {
-
+		else 
+		{
+			return MF_E_NO_MORE_TYPES;	// We really want float PCM
 		}
 
 		
@@ -601,6 +601,11 @@ HRESULT CSampleGrabber::SetInputType(
 			HRESULT hr = pType->GetGUID(MF_MT_MAJOR_TYPE, &major_type);
 			if (FAILED(hr)) return E_FAIL;
 			if (major_type != MFMediaType_Audio) return MF_E_INVALIDMEDIATYPE;
+			GUID minor_type;
+			hr = pType->GetGUID(MF_MT_SUBTYPE, &minor_type);
+			if (FAILED(hr)) return E_FAIL;
+			if (minor_type != MFAudioFormat_Float) return MF_E_INVALIDMEDIATYPE;
+
 			//TODO: may need to do more stringent test
 		}
 	}
@@ -612,7 +617,9 @@ HRESULT CSampleGrabber::SetInputType(
 		m_pInputType = pType;		
 
 		// Configure the analyzer
-		ConfigureAnalyzer();
+		HRESULT hr = ConfigureAnalyzer();
+		if (FAILED(hr))
+			return MF_E_INVALIDMEDIATYPE;
 		// When the type changes, end streaming.
 		return EndStreaming();
 	}
