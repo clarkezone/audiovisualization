@@ -35,6 +35,9 @@ public:
 	static HRESULT Initialize();
 	static HRESULT Log_ProcessInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity, DWORD dwInputStreamID, IMFSample *pSample, DWORD dwFlags,REFERENCE_TIME presentationTime);
 	static HRESULT Log_ProcessOutput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,DWORD dwFlags,DWORD cOutputBufferCount, MFT_OUTPUT_DATA_BUFFER *pBuffer,REFERENCE_TIME presentationTime);
+	static HRESULT Log_ProcessEvent(DWORD dwStreamID, IMFMediaEvent *pEvent);
+	static HRESULT Log_ProcessMessage(MFT_MESSAGE_TYPE msgType, ULONG_PTR ulParam);
+	static HRESULT Log_TestFrame(REFERENCE_TIME presentationTime, REFERENCE_TIME frameStart, REFERENCE_TIME frameEnd);
 	static HRESULT Log_SetInputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT32 overlap, UINT32 fftLength, HRESULT hConfigureResult);

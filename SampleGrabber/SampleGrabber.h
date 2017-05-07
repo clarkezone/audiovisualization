@@ -288,7 +288,6 @@ private:
 	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
 	//std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
 	concurrency::concurrent_queue<sample_queue_item> m_AnalyzerOutput;
-	long m_ExpectedFrameOffset;
 	HANDLE m_hWQAccess;	
 	AsyncCallback<CSampleGrabber> m_AnalysisStepCallback;
 	HRESULT BeginAnalysis();

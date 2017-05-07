@@ -14,8 +14,7 @@ CSampleGrabber::CSampleGrabber() :
 	m_fSampleOverlapPercentage(0.5f),
 	m_bIsLogFScale(false),
 	m_FFTLength(4096),
-	m_InputSampleRate(48000),
-	m_ExpectedFrameOffset(-1)
+	m_InputSampleRate(48000)
 {
 	Trace::Initialize();
 	SetLinearFScale(m_FFTLength/2);
@@ -107,7 +106,9 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 	}
 
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
+
 	Trace::Log_StartGetFrame(&logActivity, currentPosition,m_AnalyzerOutput.unsafe_size());
+	
 	CLogActivityHelper activity(logActivity.Get());
 
 	if (currentPosition == -1)
@@ -134,14 +135,21 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 			return hr;
 
 		// Add 5uS (about half sample time @96k) to avoid int time math rounding errors
-		if (currentPosition >= sampleTime && currentPosition <= sampleDuration + sampleTime + 50L)
+		Trace::Log_TestFrame(currentPosition, sampleTime, sampleTime + sampleDuration);
+		if (currentPosition < sampleTime)
 		{
-			Trace::Log_FrameFound(sampleTime, sampleDuration);
+			break;	// Current position is before the frames in visualization queue - wait until we catch up
+		}
+
+		if (currentPosition <= sampleDuration + sampleTime + 50L)
+		{
+			Trace::Log_FrameFound(sampleTime, sampleDuration);	// Sample is found
 			spSample = m_AnalyzerOutput.unsafe_begin()->sample;
 			break;
 		}
 		else
 		{
+			// Current position is after the item in the queue - remove and continue searching
 			sample_queue_item item;
 			m_AnalyzerOutput.try_pop(item);
 		}
@@ -846,10 +854,8 @@ HRESULT CSampleGrabber::ProcessEvent(
 	IMFMediaEvent      *pEvent
 	)
 {
-	// This MFT does not handle any stream events, so the method can
-	// return E_NOTIMPL. This tells the pipeline that it can stop
-	// sending any more events to this MFT.
-	return E_NOTIMPL;
+	Trace::Log_ProcessEvent(dwInputStreamID, pEvent);
+	return S_OK;
 }
 
 
@@ -866,6 +872,7 @@ HRESULT CSampleGrabber::ProcessMessage(
 
 	HRESULT hr = S_OK;
 
+	Trace::Log_ProcessMessage(eMessage, ulParam);
 	switch (eMessage)
 	{
 	case MFT_MESSAGE_COMMAND_FLUSH:
@@ -909,6 +916,7 @@ HRESULT CSampleGrabber::ProcessMessage(
 		break;
 
 	case MFT_MESSAGE_NOTIFY_START_OF_STREAM:
+		m_Analyzer.Reset();
 		break;
 	}
 
@@ -1088,8 +1096,13 @@ HRESULT CSampleGrabber::BeginStreaming()
 
 HRESULT CSampleGrabber::OnFlush()
 {
-	// For this MFT, flushing just means releasing the input sample.
+	// Release input sample and reset the analyzer and queues
+	m_Analyzer.Reset();
+	auto lock = m_csOutputQueueAccess.Lock();
+	m_AnalyzerOutput.clear();
+
 	m_pSample.Reset();
+
 	return S_OK;
 }
 

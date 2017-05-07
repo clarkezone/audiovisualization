@@ -16,6 +16,8 @@ using namespace Microsoft::WRL::Wrappers;
 #define MFT_PROCESS_OUTPUT L"MFT_ProcessOutput"
 #define MFT_SET_INPUT_TYPE L"MFT_SetInputType"
 #define MFT_SET_OUTPUT_TYPE L"MFT_SetOutputType"
+#define MFT_PROCESS_EVENT L"MFT_ProcessEvent"
+#define MFT_PROCESS_MESSAGE L"MFT_ProcessMessage"
 
 // Analyzer events
 #define ANALYZER_CONFIGURE L"SA_Configure"
@@ -172,6 +174,50 @@ HRESULT Trace::Log_ProcessOutput(ABI::Windows::Foundation::Diagnostics::ILogging
 	fields->AddUInt32(HStringReference(L"Flags").Get(), dwFlags);
 	hr = g_spLogChannel->StartActivityWithFields(HStringReference(MFT_PROCESS_OUTPUT).Get(), fields.Get(), ppActivity);
 	return hr;
+}
+
+HRESULT Trace::Log_ProcessEvent(DWORD dwStreamID, IMFMediaEvent * pEvent)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+	fields->AddUInt32(HStringReference(L"StreamId").Get(), dwStreamID);
+	MediaEventType eventType;
+	pEvent->GetType(&eventType);
+	HRESULT hs;
+	pEvent->GetStatus(&hs);
+	fields->AddUInt32(HStringReference(L"Type").Get(), eventType);
+	fields->AddUInt32WithFormat(HStringReference(L"Status").Get(), hs,LoggingFieldFormat::LoggingFieldFormat_HResult);
+
+	hr = g_spLogChannel->LogEventWithFields(HStringReference(MFT_PROCESS_EVENT).Get(), fields.Get());
+	return hr;
+}
+
+HRESULT Trace::Log_ProcessMessage(MFT_MESSAGE_TYPE msgType, ULONG_PTR ulParam)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+	fields->AddUInt32(HStringReference(L"Type").Get(), msgType);
+	fields->AddUInt64(HStringReference(L"Param").Get(), ulParam);
+
+	hr = g_spLogChannel->LogEventWithFields(HStringReference(MFT_PROCESS_MESSAGE).Get(), fields.Get());
+	return hr;
+}
+
+HRESULT Trace::Log_TestFrame(REFERENCE_TIME presentationTime, REFERENCE_TIME frameStart, REFERENCE_TIME frameEnd)
+{
+	ComPtr<ILoggingFields> fields;
+	HRESULT hr = CreateLoggingFields(&fields);
+	if (FAILED(hr))
+		return hr;
+	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { presentationTime });
+	fields->AddTimeSpan(HStringReference(L"Start").Get(), ABI::Windows::Foundation::TimeSpan() = { frameStart });
+	fields->AddTimeSpan(HStringReference(L"End").Get(), ABI::Windows::Foundation::TimeSpan() = { frameEnd });
+
+	return g_spLogChannel->LogEventWithFields(HStringReference(APP_GF_TESTFRAME).Get(), fields.Get());
 }
 
 HRESULT Trace::Log_SetInputType(DWORD dwStreamID, IMFMediaType *pMediaType)
@@ -335,7 +381,7 @@ HRESULT Trace::Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::I
 	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddInt64(HStringReference(L"Offset").Get(), inputSampleOffset);
-	fields->AddInt64(HStringReference(L"ExpectedOffset").Get(), expectedOffset);
+	fields->AddInt64(HStringReference(L"BufferOffset").Get(), expectedOffset);
 	return g_spLogChannel->StartActivityWithFields(HStringReference(ANALYZER_APPEND_INPUT).Get(), fields.Get(), ppActivity);
 
 }
@@ -352,7 +398,7 @@ HRESULT Trace::Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::IL
 	fields->AddUInt32(HStringReference(L"BufferSize").Get(), samplesInBuffer);
 	fields->AddUInt32WithFormat(HStringReference(L"pWrite").Get(), (UINT32)pWritePtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
 	fields->AddUInt32WithFormat(HStringReference(L"pRead").Get(), (UINT32)pReadPtr, LoggingFieldFormat::LoggingFieldFormat_Hexadecimal);
-	fields->AddInt64(HStringReference(L"ExpectedOffset").Get(), expectedOffset);
+	fields->AddInt64(HStringReference(L"BufferOffset").Get(), expectedOffset);
 
 	ComPtr<ILoggingActivity> spActivity = pActivity;
 	ComPtr<ILoggingActivity2> spActivity2;
