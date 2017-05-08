@@ -91,129 +91,6 @@ HRESULT CSampleGrabber::GetSingleData(ABI::SampleGrabber::Data *pData) {
 	return S_OK;
 }
 
-HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
-{
-	using namespace Microsoft::WRL;
-	using namespace Microsoft::WRL::Wrappers;
-	using namespace ABI::Windows::Media;
-	using namespace ABI::Windows::Foundation;
-
-	// Get current presentation position
-	MFTIME currentPosition = -1;
-	HRESULT hr = S_OK;
-	if (m_spPresentationClock != nullptr) {
-		m_spPresentationClock->GetTime(&currentPosition);
-	}
-
-	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
-
-	Trace::Log_StartGetFrame(&logActivity, currentPosition,m_AnalyzerOutput.unsafe_size());
-	
-	CLogActivityHelper activity(logActivity.Get());
-
-	if (currentPosition == -1)
-	{
-		*ppResult = nullptr;
-		return S_OK;
-	}
-
-	// Forward the output queue to the current presentation position and return that sample
-	// Remove samples that are in the front and not matching the current presentation time
-	ComPtr<IMFSample> spSample;
-	
-	auto lock = m_csOutputQueueAccess.Lock();
-
-	while (!m_AnalyzerOutput.empty())
-	{
-		auto item = m_AnalyzerOutput.unsafe_begin();
-		REFERENCE_TIME sampleTime = 0, sampleDuration = 0;
-		hr = item->sample->GetSampleTime(&sampleTime);
-		if (FAILED(hr))
-			return hr;
-		hr = item->sample->GetSampleDuration(&sampleDuration);
-		if (FAILED(hr))
-			return hr;
-
-		// Add 5uS (about half sample time @96k) to avoid int time math rounding errors
-		Trace::Log_TestFrame(currentPosition, sampleTime, sampleTime + sampleDuration);
-		if (currentPosition < sampleTime)
-		{
-			break;	// Current position is before the frames in visualization queue - wait until we catch up
-		}
-
-		if (currentPosition <= sampleDuration + sampleTime + 50L)
-		{
-			Trace::Log_FrameFound(sampleTime, sampleDuration);	// Sample is found
-			spSample = m_AnalyzerOutput.unsafe_begin()->sample;
-			break;
-		}
-		else
-		{
-			// Current position is after the item in the queue - remove and continue searching
-			sample_queue_item item;
-			m_AnalyzerOutput.try_pop(item);
-		}
-	}
-	// Position not found in the queue
-	if (spSample == nullptr)
-	{
-		Trace::Log_FrameNotFound();
-		*ppResult = nullptr;
-		return S_OK;
-
-	}
-	
-	MULTI_QI qiFactory[1] = { { &__uuidof(IAudioFrameNativeFactory),nullptr,S_OK } };
-	hr = CoCreateInstanceFromApp(CLSID_AudioFrameNativeFactory, nullptr, CLSCTX_INPROC_SERVER, nullptr, 1, qiFactory);
-	if (FAILED(hr))
-		return hr;
-	if (FAILED(qiFactory[0].hr))
-		return qiFactory[0].hr;
-
-	ComPtr<IAudioFrameNativeFactory> spNativeFactory = (IAudioFrameNativeFactory *)qiFactory[0].pItf;
-
-
-	// Now use the factory to create frame out of IMFSample
-	hr = spNativeFactory->CreateFromMFSample(spSample.Get(), false, IID_PPV_ARGS(ppResult));
-
-	return S_OK;
-}
-
-HRESULT CSampleGrabber::Configure(float outputSampleRate, float overlapPercentage, unsigned long fftLength)
-{
-	Trace::Log_Configure(outputSampleRate, overlapPercentage, fftLength);
-	// Allow 1- 60fps
-	if (outputSampleRate > 60.0 || outputSampleRate < 1.0)
-	{
-		return E_INVALIDARG;
-	}
-	if (overlapPercentage < 0.0 || overlapPercentage > 1.0)
-	{
-		return E_INVALIDARG;
-	}
-	if ((fftLength & (fftLength - 1)) != 0 || fftLength < 256 || fftLength > 0x20000)	// Set some limits
-	{
-		return E_INVALIDARG;
-	}
-	if (m_pInputType != nullptr)
-	{
-		UINT32 sampleRate = 0;
-		m_pInputType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &sampleRate);
-		unsigned inputLength = (unsigned) ((sampleRate / outputSampleRate) * (1 + overlapPercentage));
-		if (fftLength < inputLength)
-			return E_INVALIDARG;
-	}
-	m_fOutputSampleRate = outputSampleRate;
-	m_fSampleOverlapPercentage = overlapPercentage;
-	m_FFTLength = fftLength;
-
-	if (m_pInputType != nullptr)
-	{
-		ConfigureAnalyzer();
-	}
-
-	return S_OK;
-}
 
 HRESULT CSampleGrabber::GetStreamLimits(
 	DWORD   *pdwInputMinimum,
@@ -1099,7 +976,9 @@ HRESULT CSampleGrabber::OnFlush()
 	// Release input sample and reset the analyzer and queues
 	m_Analyzer.Reset();
 	auto lock = m_csOutputQueueAccess.Lock();
-	m_AnalyzerOutput.clear();
+
+	while (!m_AnalyzerOutput.empty())
+		m_AnalyzerOutput.pop();
 
 	m_pSample.Reset();
 
@@ -1109,7 +988,6 @@ HRESULT CSampleGrabber::OnFlush()
 HRESULT CSampleGrabber::BeginAnalysis()
 {
 	Trace::Log_BeginAnalysis();
-#ifdef PROCESS_SAMPLES_ASYNC
 	// See if the access semaphore is signaled
 	DWORD dwWaitResult = WaitForSingleObject(m_hWQAccess, 0);
 	if (dwWaitResult == WAIT_OBJECT_0) // 
@@ -1122,35 +1000,7 @@ HRESULT CSampleGrabber::BeginAnalysis()
 		return S_FALSE;	// Analysis is already running
 	}
 	else
-		return E_FAIL;
-#else
-	HRESULT hr = S_OK;
-	while (hr == S_OK)
-	{
-		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
-		Trace::Log_StartAnalyzerStep(&spActivity);
-
-		Microsoft::WRL::ComPtr<IMFSample> spSample;
-		HRESULT hr = m_Analyzer.Step(&spSample);
-		REFERENCE_TIME timestamp = -1;
-
-		if (spSample != nullptr)
-			spSample->GetSampleTime(&timestamp);
-
-		Trace::Log_StopAnalyzerStep(spActivity.Get(), timestamp, hr);
-
-		if (hr == S_OK)
-		{
-			Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spPushActivity;
-			Trace::Log_StartOutputQueuePush(&spPushActivity, timestamp);
-			CLogActivityHelper pushActivity(spPushActivity.Get());
-			auto lock = m_csOutputQueueAccess.Lock();
-			m_AnalyzerOutput.push(spSample.Get());
-		}
-	}
-	return S_OK;
-#endif
-	
+		return E_FAIL;	
 }
 HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 {
@@ -1171,7 +1021,19 @@ HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 		Trace::Log_StartOutputQueuePush(&spPushActivity,timestamp);
 		CLogActivityHelper pushActivity(spPushActivity.Get());
 		auto lock =  m_csOutputQueueAccess.Lock();
+		
+		REFERENCE_TIME currentPosition = -1;
+		if (m_spPresentationClock != nullptr)
+			m_spPresentationClock->GetTime(&currentPosition);
+
+		FastForwardQueueToPosition(currentPosition, nullptr);
+		
+		// Now manage queue size - remove items until the size is below limit
+		while (m_AnalyzerOutput.size() > cMaxOutputQueueSize)
+			m_AnalyzerOutput.pop();
+
 		m_AnalyzerOutput.push(spSample.Get());
+
 	}
 	else
 	{
@@ -1182,6 +1044,141 @@ HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 
 	// Schedule next work item
 	return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_AnalysisStepCallback, nullptr);
+}
+
+HRESULT CSampleGrabber::FastForwardQueueToPosition(REFERENCE_TIME position, IMFSample ** ppSample)
+{
+	if (position < 0)
+		return S_FALSE;
+
+	while (!m_AnalyzerOutput.empty())
+	{
+		REFERENCE_TIME sampleTime = 0, sampleDuration = 0;
+		HRESULT hr = m_AnalyzerOutput.front()->GetSampleTime(&sampleTime);
+		if (FAILED(hr))
+			return hr;
+		
+		hr = m_AnalyzerOutput.front()->GetSampleDuration(&sampleDuration);
+		if (FAILED(hr))
+			return hr;
+
+		// Add 5uS (about half sample time @96k) to avoid int time math rounding errors
+		Trace::Log_TestFrame(position, sampleTime, sampleTime + sampleDuration);
+		if (position < sampleTime)
+		{
+			return S_FALSE; // Current position is before the frames in visualization queue - wait until we catch up
+		}
+
+		if (position <= sampleDuration + sampleTime + 50L)
+		{
+			Trace::Log_FrameFound(sampleTime, sampleDuration);	// Sample is found
+			if (ppSample != nullptr)	// If sample is requested, return the sample found
+				m_AnalyzerOutput.front().CopyTo(ppSample);
+			return S_OK;
+		}
+		else
+		{
+			// Current position is after the item in the queue - remove and continue searching
+			m_AnalyzerOutput.pop();
+		}
+	}
+	return S_FALSE;
+}
+
+HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
+{
+	using namespace Microsoft::WRL;
+	using namespace Microsoft::WRL::Wrappers;
+	using namespace ABI::Windows::Media;
+	using namespace ABI::Windows::Foundation;
+
+	// Get current presentation position
+	MFTIME currentPosition = -1;
+	HRESULT hr = S_OK;
+	if (m_spPresentationClock != nullptr) {
+		m_spPresentationClock->GetTime(&currentPosition);
+	}
+
+	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
+
+	Trace::Log_StartGetFrame(&logActivity, currentPosition, m_AnalyzerOutput.size());
+
+	CLogActivityHelper activity(logActivity.Get());
+
+	if (currentPosition == -1)
+	{
+		*ppResult = nullptr;
+		return S_OK;
+	}
+
+	ComPtr<IMFSample> spSample;
+
+	auto lock = m_csOutputQueueAccess.Lock();
+	
+	hr = FastForwardQueueToPosition(currentPosition, &spSample);
+	
+	lock.Unlock();
+
+	if (FAILED(hr))
+		return hr;
+
+	// Position not found in the queue
+	if (hr != S_OK || spSample == nullptr)
+	{
+		Trace::Log_FrameNotFound();
+		*ppResult = nullptr;
+		return S_OK;
+	}
+
+	MULTI_QI qiFactory[1] = { { &__uuidof(IAudioFrameNativeFactory),nullptr,S_OK } };
+	hr = CoCreateInstanceFromApp(CLSID_AudioFrameNativeFactory, nullptr, CLSCTX_INPROC_SERVER, nullptr, 1, qiFactory);
+	if (FAILED(hr))
+		return hr;
+	if (FAILED(qiFactory[0].hr))
+		return qiFactory[0].hr;
+
+	ComPtr<IAudioFrameNativeFactory> spNativeFactory = (IAudioFrameNativeFactory *)qiFactory[0].pItf;
+
+	// Now use the factory to create frame out of IMFSample
+	hr = spNativeFactory->CreateFromMFSample(spSample.Get(), false, IID_PPV_ARGS(ppResult));
+
+	return S_OK;
+}
+
+HRESULT CSampleGrabber::Configure(float outputSampleRate, float overlapPercentage, unsigned long fftLength)
+{
+	Trace::Log_Configure(outputSampleRate, overlapPercentage, fftLength);
+	// Allow 1- 60fps
+	if (outputSampleRate > 60.0 || outputSampleRate < 1.0)
+	{
+		return E_INVALIDARG;
+	}
+	if (overlapPercentage < 0.0 || overlapPercentage > 1.0)
+	{
+		return E_INVALIDARG;
+	}
+	if ((fftLength & (fftLength - 1)) != 0 || fftLength < 256 || fftLength > 0x20000)	// Set some limits
+	{
+		return E_INVALIDARG;
+	}
+	if (m_pInputType != nullptr)
+	{
+		UINT32 sampleRate = 0;
+		m_pInputType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &sampleRate);
+		unsigned inputLength = (unsigned)((sampleRate / outputSampleRate) * (1 + overlapPercentage));
+		if (fftLength < inputLength)
+			return E_INVALIDARG;
+	}
+	m_fOutputSampleRate = outputSampleRate;
+	m_fSampleOverlapPercentage = overlapPercentage;
+	m_FFTLength = fftLength;
+
+	if (m_pInputType != nullptr)
+	{
+		ConfigureAnalyzer();
+	}
+
+	return S_OK;
 }
 
 HRESULT CSampleGrabber::ConfigureAnalyzer()

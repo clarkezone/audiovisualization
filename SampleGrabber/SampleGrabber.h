@@ -29,33 +29,6 @@ class CSampleGrabber
 	ABI::Windows::Media::IMediaExtension, ABI::SampleGrabber::IMyInterface,
 	IMFTransform,IMFClockConsumer >
 {
-	struct sample_queue_item
-	{
-	public:
-		Microsoft::WRL::ComPtr<IMFSample> sample;
-		REFERENCE_TIME time;
-		REFERENCE_TIME duration;
-		sample_queue_item()
-		{
-			time = 0;
-			duration = 0;
-		}
-		sample_queue_item(IMFSample *pSample)
-		{
-			sample = pSample;
-			if (pSample != nullptr)
-			{
-				pSample->GetSampleTime(&time);
-				pSample->GetSampleDuration(&duration);
-			}
-			else
-			{
-				time = 0;
-				duration = 0;
-			}
-		}
-	};
-
 	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)
 
 public:
@@ -284,14 +257,15 @@ private:
 	HRESULT OnFlush();
 
 	CSpectrumAnalyzer			m_Analyzer;
+	const size_t cMaxOutputQueueSize = 600;	// Allow maximum 10sec worth of elements
 
 	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
-	//std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
-	concurrency::concurrent_queue<sample_queue_item> m_AnalyzerOutput;
+	std::queue<Microsoft::WRL::ComPtr<IMFSample>> m_AnalyzerOutput;
 	HANDLE m_hWQAccess;	
 	AsyncCallback<CSampleGrabber> m_AnalysisStepCallback;
 	HRESULT BeginAnalysis();
 	HRESULT ConfigureAnalyzer();
 	HRESULT OnAnalysisStep(IMFAsyncResult *pResult);
+	HRESULT FastForwardQueueToPosition(REFERENCE_TIME position, IMFSample **ppSample);	// Removes samples before position and return ppSample if found
 };
 
