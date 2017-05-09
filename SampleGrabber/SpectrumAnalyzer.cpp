@@ -96,6 +96,8 @@ HRESULT CSpectrumAnalyzer::AllocateBuffers()
 {
 	using namespace DirectX;
 
+	FreeBuffers();	// First free any existing memory allocations
+
 	// Allocate data for the input data ring buffer
 	m_InputReadPtrSampleIndex = 0;
 
@@ -133,6 +135,11 @@ void CSpectrumAnalyzer::FreeBuffers()
 		_aligned_free(m_pFftReal);
 	if (m_pFftBuffers != nullptr)
 		_aligned_free(m_pFftBuffers);
+
+	m_pWindow = nullptr;
+	m_pFftUnityTable = nullptr;
+	m_pFftReal = nullptr;
+	m_pFftBuffers = nullptr;
 }
 
 // Copy data from the sample to the input ring buffer

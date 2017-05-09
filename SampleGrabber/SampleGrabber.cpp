@@ -978,7 +978,10 @@ HRESULT CSampleGrabber::OnFlush()
 	auto lock = m_csOutputQueueAccess.Lock();
 
 	while (!m_AnalyzerOutput.empty())
+	{
+		m_AnalyzerOutput.front() = nullptr;
 		m_AnalyzerOutput.pop();
+	}
 
 	m_pSample.Reset();
 
@@ -1030,8 +1033,10 @@ HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 		
 		// Now manage queue size - remove items until the size is below limit
 		while (m_AnalyzerOutput.size() > cMaxOutputQueueSize)
+		{
+			m_AnalyzerOutput.front() = nullptr;
 			m_AnalyzerOutput.pop();
-
+		}
 		m_AnalyzerOutput.push(spSample.Get());
 
 	}
@@ -1078,7 +1083,12 @@ HRESULT CSampleGrabber::FastForwardQueueToPosition(REFERENCE_TIME position, IMFS
 		}
 		else
 		{
+			if (position == 0)	// Do not use position 0 to manage queue elements as position can be set to 0 for a long time after stream starts
+			{
+				return S_FALSE;
+			}
 			// Current position is after the item in the queue - remove and continue searching
+			m_AnalyzerOutput.front() = nullptr; // Dereference the pointer
 			m_AnalyzerOutput.pop();
 		}
 	}
