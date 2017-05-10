@@ -265,5 +265,6 @@ private:
 	HRESULT ConfigureAnalyzer();
 	HRESULT OnAnalysisStep(IMFAsyncResult *pResult);
 	HRESULT FastForwardQueueToPosition(REFERENCE_TIME position, IMFSample **ppSample);	// Removes samples before position and return ppSample if found
+	HRESULT FlushOutputQueue();
 };
 

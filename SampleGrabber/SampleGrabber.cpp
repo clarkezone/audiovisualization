@@ -985,6 +985,14 @@ HRESULT CSampleGrabber::OnFlush()
 
 	// Release input sample and reset the analyzer and queues
 	m_Analyzer.Reset();
+	FlushOutputQueue();
+	m_pSample.Reset();
+
+	return S_OK;
+}
+
+HRESULT CSampleGrabber::FlushOutputQueue()
+{
 	auto lock = m_csOutputQueueAccess.Lock();
 
 	while (!m_AnalyzerOutput.empty())
@@ -992,9 +1000,6 @@ HRESULT CSampleGrabber::OnFlush()
 		m_AnalyzerOutput.front() = nullptr;
 		m_AnalyzerOutput.pop_front();
 	}
-
-	m_pSample.Reset();
-
 	return S_OK;
 }
 
@@ -1236,12 +1241,17 @@ HRESULT CSampleGrabber::ConfigureAnalyzer()
 	if (m_pInputType == nullptr)
 		return E_FAIL;
 
+
 	m_pInputType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &m_InputSampleRate);
 
 	UINT32 samplesPerAnalyzerOutputFrame = (UINT32) (m_InputSampleRate / m_fOutputSampleRate);
 	UINT32 overlap = (UINT32) (samplesPerAnalyzerOutputFrame * m_fSampleOverlapPercentage);	// 50% overlap
 
 	HRESULT hr = m_Analyzer.Configure(m_pInputType.Get(), samplesPerAnalyzerOutputFrame, overlap, m_FFTLength);
+
+	// We also need to drain any output samples
+	FlushOutputQueue();
+
 	Trace::Log_ConfigureAnalyzer(samplesPerAnalyzerOutputFrame, overlap, m_FFTLength, hr);
 	return hr;
 }
@@ -1258,6 +1268,9 @@ STDMETHODIMP CSampleGrabber::SetLogFScale(float lowFrequency, float highFrequenc
 	m_FrequencyBins = numberOfBins;
 	m_fFrequencyStep = pow(m_fHighFrequency / m_fLowFrequency, 1.f / m_FrequencyBins);
 	m_Analyzer.SetLogFScale(m_fLowFrequency, m_fHighFrequency, m_FrequencyBins);
+	// We also need to drain any output samples
+	FlushOutputQueue();
+
 	return S_OK;
 }
 STDMETHODIMP CSampleGrabber::SetLinearFScale(unsigned long numberOfBins)
@@ -1269,5 +1282,7 @@ STDMETHODIMP CSampleGrabber::SetLinearFScale(unsigned long numberOfBins)
 	m_FrequencyBins = numberOfBins == 0 ? m_FFTLength >> 1 : numberOfBins;
 	m_fFrequencyStep = (float) m_InputSampleRate / (float) 2*m_FrequencyBins;
 	m_Analyzer.SetLinearFScale(m_FrequencyBins);
+	// We also need to drain any output samples
+	FlushOutputQueue();
 	return S_OK;
 }
