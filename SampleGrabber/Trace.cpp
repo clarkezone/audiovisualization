@@ -258,7 +258,7 @@ HRESULT Trace::Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT3
 }
 
 
-HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME presentationTime,size_t queueSize)
+HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME presentationTime,const REFERENCE_TIME *pTimes,size_t queueSize)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
@@ -266,6 +266,11 @@ HRESULT Trace::Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILogging
 		return hr;
 
 	fields->AddTimeSpan(HStringReference(L"PresentationTime").Get(), ABI::Windows::Foundation::TimeSpan() = { presentationTime });
+	if (queueSize > 0)
+		fields->AddTimeSpanArray(HStringReference(L"Queue").Get(), queueSize, (ABI::Windows::Foundation::TimeSpan *) pTimes);
+	else
+		fields->AddEmpty(HStringReference(L"Queue").Get());
+
 	fields->AddUInt32(HStringReference(L"Queue.size").Get(),queueSize);
 	return g_spLogChannel->StartActivityWithFields(HStringReference(APP_GETFRAME).Get(), fields.Get(), ppActivity);
 }
@@ -355,7 +360,7 @@ HRESULT Trace::Log_SetLinearScale(size_t bins)
 	return g_spLogChannel->LogEventWithFields(HStringReference(APP_SETLINEARSCALE).Get(),fields.Get());
 }
 
-HRESULT Trace::Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity,REFERENCE_TIME time)
+HRESULT Trace::Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity ** ppActivity,REFERENCE_TIME time,const REFERENCE_TIME *pTimes,size_t queueSize)
 {
 	ComPtr<ILoggingFields> fields;
 	HRESULT hr = CreateLoggingFields(&fields);
@@ -363,6 +368,14 @@ HRESULT Trace::Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::I
 		return hr;
 
 	fields->AddTimeSpan(HStringReference(L"Time").Get(), ABI::Windows::Foundation::TimeSpan() = { time });
+
+	if (queueSize > 0)
+		fields->AddTimeSpanArray(HStringReference(L"Queue").Get(), queueSize, (ABI::Windows::Foundation::TimeSpan *) pTimes);
+	else
+		fields->AddEmpty(HStringReference(L"Queue").Get());
+
+	fields->AddUInt32(HStringReference(L"Queue.Size").Get(), queueSize);
+
 
 	return g_spLogChannel->StartActivityWithFields(HStringReference(QO_PUSH).Get(), fields.Get(), ppActivity);
 }

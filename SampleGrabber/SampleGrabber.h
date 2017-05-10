@@ -18,8 +18,6 @@
 #include <malloc.h>
 #include "MFHelpers.h"
 #include "SpectrumAnalyzer.h"
-#include <queue>
-#include <list>
 #include "AsyncCallback.h"
 
 class CSampleGrabber
@@ -259,8 +257,9 @@ private:
 	const size_t cMaxOutputQueueSize = 600;	// Allow maximum 10sec worth of elements
 
 	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
-	std::queue<Microsoft::WRL::ComPtr<IMFSample>,std::list<Microsoft::WRL::ComPtr<IMFSample>>> m_AnalyzerOutput;
+	std::deque<Microsoft::WRL::ComPtr<IMFSample>> m_AnalyzerOutput;
 	HANDLE m_hWQAccess;		// Semaphore for work queue access
+	HANDLE m_hResetWorkQueue;	// Event which signals that the work queue is being reset - while signalled no operations should be performed on output queue. Set in ProcessMessage and reset in ProcessInput
 	AsyncCallback<CSampleGrabber> m_AnalysisStepCallback;
 	HRESULT BeginAnalysis();
 	HRESULT ConfigureAnalyzer();

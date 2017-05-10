@@ -35,7 +35,7 @@ template<class T> HRESULT mapToLinearScale(const T *pInput, size_t inputSize, T 
 	if (outputSize > inputSize)
 		return E_INVALIDARG;
 
-	T inStep = inputSize / outputSize;
+	T inStep = (T) inputSize / (T) outputSize;
 	T inIndex = 0;
 	T nextInIndex = inIndex + inStep;
 	T scaler = 1 / inStep;
@@ -58,6 +58,7 @@ template<class T> HRESULT mapToLinearScale(const T *pInput, size_t inputSize, T 
 		inIndex = nextInIndex;
 		nextInIndex = inIndex + inStep;
 	}
+	return S_OK;
 }
 
 // Map input array to logarithmic distribution into output, starting from outMin value to outMax (as indexes into input array) 

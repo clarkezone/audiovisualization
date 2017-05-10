@@ -14,19 +14,23 @@ CSampleGrabber::CSampleGrabber() :
 	m_fSampleOverlapPercentage(0.5f),
 	m_bIsLogFScale(false),
 	m_FFTLength(4096),
-	m_InputSampleRate(48000)
+	m_InputSampleRate(48000),
+	m_hWQAccess(INVALID_HANDLE_VALUE),
+	m_hResetWorkQueue(INVALID_HANDLE_VALUE)
 {
 	Trace::Initialize();
 	SetLinearFScale(m_FFTLength/2);
 	m_Analyzer.SetLogAmplitudeScale(-100.0f, 100.0f);
 	TRACE(L"construct");
 	m_hWQAccess = CreateSemaphore(nullptr, 1, 1, nullptr);
+	m_hResetWorkQueue = CreateEventEx(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);	// Manual reset event
 }
 
 CSampleGrabber::~CSampleGrabber()
 {
 	m_pAttributes.Reset();
 	CloseHandle(m_hWQAccess);
+	CloseHandle(m_hResetWorkQueue);
 }
 
 // Initialize the instance.
@@ -924,6 +928,9 @@ HRESULT CSampleGrabber::ProcessOutput(
 
 #pragma region MyRegion
 
+	// Allow processing
+	SetEvent(m_hResetWorkQueue);
+
 	// Queue the audio frame in the analyzer buffer
 	hr = m_Analyzer.AppendInput(m_pSample.Get());
 	BeginAnalysis();
@@ -973,6 +980,9 @@ HRESULT CSampleGrabber::BeginStreaming()
 
 HRESULT CSampleGrabber::OnFlush()
 {
+	// Dissallow processing and discard any output until new samples arrive
+	ResetEvent(m_hResetWorkQueue);
+
 	// Release input sample and reset the analyzer and queues
 	m_Analyzer.Reset();
 	auto lock = m_csOutputQueueAccess.Lock();
@@ -980,7 +990,7 @@ HRESULT CSampleGrabber::OnFlush()
 	while (!m_AnalyzerOutput.empty())
 	{
 		m_AnalyzerOutput.front() = nullptr;
-		m_AnalyzerOutput.pop();
+		m_AnalyzerOutput.pop_front();
 	}
 
 	m_pSample.Reset();
@@ -1007,6 +1017,13 @@ HRESULT CSampleGrabber::BeginAnalysis()
 }
 HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 {
+	// If in reset state do not even process anything
+	DWORD dwWaitResult = WaitForSingleObject(m_hResetWorkQueue, 0);
+	if (dwWaitResult != WAIT_OBJECT_0)
+	{
+		ReleaseSemaphore(m_hWQAccess, 1, nullptr);
+		return S_OK;
+	}
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
 	Trace::Log_StartAnalyzerStep(&spActivity);
 	Microsoft::WRL::ComPtr<IMFSample> spSample;
@@ -1018,13 +1035,25 @@ HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 
 	Trace::Log_StopAnalyzerStep(spActivity.Get(), timestamp, hr);
 
-	if (hr == S_OK)
+	auto lock = m_csOutputQueueAccess.Lock();
+	dwWaitResult = WaitForSingleObject(m_hResetWorkQueue, 0);
+	// Only push the result if reset is not pending
+	if (hr == S_OK && dwWaitResult == WAIT_OBJECT_0)
 	{
 		Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spPushActivity;
-		Trace::Log_StartOutputQueuePush(&spPushActivity,timestamp);
-		CLogActivityHelper pushActivity(spPushActivity.Get());
-		auto lock =  m_csOutputQueueAccess.Lock();
 		
+		std::vector<REFERENCE_TIME> times(m_AnalyzerOutput.size());
+		size_t timeIndex = 0;
+		for each (auto pSample in m_AnalyzerOutput)
+		{
+			REFERENCE_TIME time = -1;
+			if (pSample != nullptr)
+				pSample->GetSampleTime(&time);
+			times[timeIndex++] = time;
+		}
+		Trace::Log_StartOutputQueuePush(&spPushActivity, timestamp,!m_AnalyzerOutput.empty()?&times[0]:nullptr,m_AnalyzerOutput.size());
+		CLogActivityHelper pushActivity(spPushActivity.Get());
+
 		REFERENCE_TIME currentPosition = -1;
 		if (m_spPresentationClock != nullptr)
 			m_spPresentationClock->GetTime(&currentPosition);
@@ -1035,9 +1064,10 @@ HRESULT CSampleGrabber::OnAnalysisStep(IMFAsyncResult *pResult)
 		while (m_AnalyzerOutput.size() > cMaxOutputQueueSize)
 		{
 			m_AnalyzerOutput.front() = nullptr;
-			m_AnalyzerOutput.pop();
+			m_AnalyzerOutput.pop_front();
 		}
-		m_AnalyzerOutput.push(spSample.Get());
+
+		m_AnalyzerOutput.push_back(spSample.Get());
 
 	}
 	else
@@ -1089,7 +1119,7 @@ HRESULT CSampleGrabber::FastForwardQueueToPosition(REFERENCE_TIME position, IMFS
 			}
 			// Current position is after the item in the queue - remove and continue searching
 			m_AnalyzerOutput.front() = nullptr; // Dereference the pointer
-			m_AnalyzerOutput.pop();
+			m_AnalyzerOutput.pop_front();
 		}
 	}
 	return S_FALSE;
@@ -1111,7 +1141,18 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 
 	Microsoft::WRL::ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> logActivity;
 
-	Trace::Log_StartGetFrame(&logActivity, currentPosition, m_AnalyzerOutput.size());
+	auto lock = m_csOutputQueueAccess.Lock();
+	std::vector<REFERENCE_TIME> times(m_AnalyzerOutput.size());
+	size_t timeIndex = 0;
+	for each (auto pSample in m_AnalyzerOutput)
+	{
+		REFERENCE_TIME time = -1;
+		if (pSample != nullptr)
+			pSample->GetSampleTime(&time);
+		times[timeIndex++] = time;
+	}
+
+	Trace::Log_StartGetFrame(&logActivity, currentPosition, times.size() != 0 ? &times[0] : nullptr, m_AnalyzerOutput.size());
 
 	CLogActivityHelper activity(logActivity.Get());
 
@@ -1123,7 +1164,6 @@ HRESULT CSampleGrabber::GetFrame(ABI::Windows::Media::IAudioFrame **ppResult)
 
 	ComPtr<IMFSample> spSample;
 
-	auto lock = m_csOutputQueueAccess.Lock();
 	
 	hr = FastForwardQueueToPosition(currentPosition, &spSample);
 	
