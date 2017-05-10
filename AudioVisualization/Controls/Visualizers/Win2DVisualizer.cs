@@ -26,6 +26,7 @@ namespace AudioVisualization.Controls.Visualizers
         CanvasSwapChain _swapChain;
         SpriteVisual _swapChainVisual;
         CancellationTokenSource _drawLoopCancellationTokenSource;
+        object _swapChainLock;
 
 
         public Win2DVisualizer()
@@ -38,6 +39,8 @@ namespace AudioVisualization.Controls.Visualizers
             m_SpectralData = new float[][] { new float[800], new float[800] };
             m_SpectralPeakData = new float[][] { new float[80], new float[800] };
 
+            _swapChainLock = new object();
+
             CreateDevice();
             _swapChainVisual = _compositor.CreateSpriteVisual();
             _rootVisual.Children.InsertAtTop(_swapChainVisual);
@@ -47,7 +50,10 @@ namespace AudioVisualization.Controls.Visualizers
         {
             if (e != null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
-                SetDevice(_device, e.NewSize);
+                if (_swapChain == null)
+                    SetDevice(_device, e.NewSize);
+                else
+                    lock (_swapChainLock) { _swapChain.ResizeBuffers(e.NewSize); }
                 _swapChainVisual.Size = new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height);
             }
         }
@@ -116,7 +122,7 @@ namespace AudioVisualization.Controls.Visualizers
                 //sw.Start();
                 while (!canceled.IsCancellationRequested)
                 {
-                    DrawSwapChain(_swapChain);
+                    lock (_swapChainLock) { DrawSwapChain(_swapChain); }
                     _swapChain.WaitForVerticalBlank();
                 }
                 //sw.Stop();
