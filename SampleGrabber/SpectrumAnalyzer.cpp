@@ -96,6 +96,8 @@ HRESULT CSpectrumAnalyzer::AllocateBuffers()
 {
 	using namespace DirectX;
 
+	FreeBuffers();	// First free any existing memory allocations
+
 	// Allocate data for the input data ring buffer
 	m_InputReadPtrSampleIndex = 0;
 
@@ -133,6 +135,11 @@ void CSpectrumAnalyzer::FreeBuffers()
 		_aligned_free(m_pFftReal);
 	if (m_pFftBuffers != nullptr)
 		_aligned_free(m_pFftBuffers);
+
+	m_pWindow = nullptr;
+	m_pFftUnityTable = nullptr;
+	m_pFftReal = nullptr;
+	m_pFftBuffers = nullptr;
 }
 
 // Copy data from the sample to the input ring buffer
@@ -149,17 +156,6 @@ HRESULT CSpectrumAnalyzer::AppendInput(IMFSample * pSample)
 
 	ComPtr<ABI::Windows::Foundation::Diagnostics::ILoggingActivity> spActivity;
 	Trace::Log_SA_Start_AppendInput(&spActivity,sampleTime,cbLength,m_InputBuffer.size(),(void *)&*m_InputBuffer.writer(),(void *)&*m_InputBuffer.reader(), sampleOffset, m_ExpectedInputSampleOffset);
-
-	// Validate that the input data is contiguous
-	// Otherwise empty the buffer, read pointer lock needs to be aquired only when clearing the buffer
-	// Need to allow some sample difference due to rounding errors
-	if (labs(sampleOffset - m_ExpectedInputSampleOffset) > 2)
-	{
-		auto lock = m_csReadPtr.Lock();
-		Trace::Log_SA_ClearInputBuffer();
-		m_InputBuffer.clear();
-		m_InputReadPtrSampleIndex = -1;	// Get the index for reader
-	}
 
 	if (m_InputReadPtrSampleIndex == -1)
 		m_InputReadPtrSampleIndex = sampleOffset;	// Set the index for empty buffer
@@ -315,8 +311,8 @@ HRESULT CSpectrumAnalyzer::GetRingBufferData(float *pData,REFERENCE_TIME *pTimeS
 	if (!bSuccess)
 		return S_FALSE;
 
-	*pTimeStamp = 10000000 * (long long)m_InputReadPtrSampleIndex / m_InputSampleRate;
-	m_InputReadPtrSampleIndex += m_StepFrameCount;
+	*pTimeStamp = 10000000 * (long long) (m_InputReadPtrSampleIndex / m_AudioChannels) / m_InputSampleRate;
+	m_InputReadPtrSampleIndex += m_StepFrameCount * m_AudioChannels;
 
 	return S_OK;
 }
@@ -351,8 +347,9 @@ HRESULT CSpectrumAnalyzer::CreateOutputSample(IMFSample ** pSample, IMFMediaBuff
 
 void CSpectrumAnalyzer::Reset()
 {
-	m_InputBuffer.clear();
 	// Clean up any state from buffer copying
+	m_InputBuffer.clear();
+	m_InputReadPtrSampleIndex = -1;
 }
 
 

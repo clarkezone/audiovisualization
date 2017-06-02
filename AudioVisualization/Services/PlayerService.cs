@@ -44,6 +44,7 @@ namespace AudioVisualization.Services
             _mediaPlayer.Source = Playlist.PlaybackList;
 
             Playlist.PlaybackList.ItemFailed += PlaybackList_ItemFailed;
+
         }
 
         private void PlaybackList_ItemFailed(MediaPlaybackList sender, MediaPlaybackItemFailedEventArgs args)
@@ -62,12 +63,6 @@ namespace AudioVisualization.Services
             {
                 if (_referenceProperties.ContainsKey("samplegrabber"))
                 {
-                    // Configure the analyzer
-                    SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)_referenceProperties["samplegrabber"];
-                    mft.Configure(60.0f, 0.5f, 2048);       // 60fps output, 50% overlap in frames and use 2048 fft
-                    //mft.SetLogFScale(20.0f, 20000f, 800);   // Output data in logarithmic scale, from 20Hz-20kHz, 800 points per channel
-                    mft.SetLinearFScale(50);
-
                     // Debug.WriteLine(customStruct.Value);
                     //TODO get a ringbuffer interface
                 }
@@ -107,6 +102,7 @@ namespace AudioVisualization.Services
                 _referenceProperties = new PropertySet();
 
                 player.AddAudioEffect("SampleGrabber.SampleGrabberTransform", false, _referenceProperties);
+                _referenceProperties.MapChanged += _referenceProperties_MapChanged;
 
                 if (player.CurrentState == MediaPlayerState.Playing)
                 {
@@ -121,6 +117,18 @@ namespace AudioVisualization.Services
                     _mediaPlayer.Position = oldPosition;
                 }
 
+            }
+        }
+
+        private void _referenceProperties_MapChanged(IObservableMap<string, object> sender, IMapChangedEventArgs<string> @event)
+        {
+            if (@event.Key == "samplegrabber")
+            {
+                // Configure the analyzer
+                SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)sender["samplegrabber"];
+                mft.Configure(60.0f, 0.5f, 2048);       // 60fps output, 50% overlap in frames and use 2048 fft
+                                                        //mft.SetLogFScale(20.0f, 20000f, 800);   // Output data in logarithmic scale, from 20Hz-20kHz, 800 points per channel
+                mft.SetLinearFScale(50);
             }
         }
     }

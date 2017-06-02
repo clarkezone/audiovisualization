@@ -35,10 +35,13 @@ public:
 	static HRESULT Initialize();
 	static HRESULT Log_ProcessInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity, DWORD dwInputStreamID, IMFSample *pSample, DWORD dwFlags,REFERENCE_TIME presentationTime);
 	static HRESULT Log_ProcessOutput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,DWORD dwFlags,DWORD cOutputBufferCount, MFT_OUTPUT_DATA_BUFFER *pBuffer,REFERENCE_TIME presentationTime);
+	static HRESULT Log_ProcessEvent(DWORD dwStreamID, IMFMediaEvent *pEvent);
+	static HRESULT Log_ProcessMessage(MFT_MESSAGE_TYPE msgType, ULONG_PTR ulParam);
+	static HRESULT Log_TestFrame(REFERENCE_TIME presentationTime, REFERENCE_TIME frameStart, REFERENCE_TIME frameEnd);
 	static HRESULT Log_SetInputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_SetOutputType(DWORD dwStreamID, IMFMediaType *);
 	static HRESULT Log_ConfigureAnalyzer(UINT32 samplesPerAnalyzerOutputFrame, UINT32 overlap, UINT32 fftLength, HRESULT hConfigureResult);
-	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime,size_t queueSize);
+	static HRESULT Log_StartGetFrame(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **pActivity,REFERENCE_TIME presentationTime,const REFERENCE_TIME *queueTimes,size_t queueSize);
 	static HRESULT Log_FrameFound(REFERENCE_TIME start, REFERENCE_TIME duration);
 	static HRESULT Log_FrameNotFound();
 	static HRESULT Log_StartAnalyzerStep(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity);
@@ -47,8 +50,8 @@ public:
 	static HRESULT Log_AnalysisAlreadyRunning();
 	static HRESULT Log_Configure(float outFrameRate, float overlapPercentage, unsigned fftLength);
 	static HRESULT Log_SetLogFScale(float lowFrequency, float highFrequency, unsigned outElementCount);
-	static HRESULT Log_SetLinearScale();
-	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time);
+	static HRESULT Log_SetLinearScale(size_t numberOfBins);
+	static HRESULT Log_StartOutputQueuePush(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity,REFERENCE_TIME time,const REFERENCE_TIME *pTimes, size_t queueSize);
 
 	static HRESULT Log_SA_Start_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity **ppActivity, REFERENCE_TIME sampleTime, size_t sampleCount,size_t samplesInBuffer,void *pWritePtr,void *pReadPtr,long inputSampleOffset, long expectedOffset);
 	static HRESULT Log_SA_Stop_AppendInput(ABI::Windows::Foundation::Diagnostics::ILoggingActivity *pActivity, REFERENCE_TIME sampleTime, size_t sampleSize,size_t samplesInBuffer, void *pWritePtr, void *pReadPtr, long expectedOffset);

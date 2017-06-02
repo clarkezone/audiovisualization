@@ -18,9 +18,6 @@
 #include <malloc.h>
 #include "MFHelpers.h"
 #include "SpectrumAnalyzer.h"
-#include <queue>
-#include <mutex>
-#include <concurrent_queue.h>
 #include "AsyncCallback.h"
 
 class CSampleGrabber
@@ -29,33 +26,6 @@ class CSampleGrabber
 	ABI::Windows::Media::IMediaExtension, ABI::SampleGrabber::IMyInterface,
 	IMFTransform,IMFClockConsumer >
 {
-	struct sample_queue_item
-	{
-	public:
-		Microsoft::WRL::ComPtr<IMFSample> sample;
-		REFERENCE_TIME time;
-		REFERENCE_TIME duration;
-		sample_queue_item()
-		{
-			time = 0;
-			duration = 0;
-		}
-		sample_queue_item(IMFSample *pSample)
-		{
-			sample = pSample;
-			if (pSample != nullptr)
-			{
-				pSample->GetSampleTime(&time);
-				pSample->GetSampleDuration(&duration);
-			}
-			else
-			{
-				time = 0;
-				duration = 0;
-			}
-		}
-	};
-
 	InspectableClass(RuntimeClass_SampleGrabber_SampleGrabberTransform, BaseTrust)
 
 public:
@@ -284,15 +254,17 @@ private:
 	HRESULT OnFlush();
 
 	CSpectrumAnalyzer			m_Analyzer;
+	const size_t cMaxOutputQueueSize = 600;	// Allow maximum 10sec worth of elements
 
 	Microsoft::WRL::Wrappers::CriticalSection m_csOutputQueueAccess;
-	//std::queue<Microsoft::WRL::ComPtr<IMFSample>>	m_AnalyzerOutput;
-	concurrency::concurrent_queue<sample_queue_item> m_AnalyzerOutput;
-	long m_ExpectedFrameOffset;
-	HANDLE m_hWQAccess;	
+	std::deque<Microsoft::WRL::ComPtr<IMFSample>> m_AnalyzerOutput;
+	HANDLE m_hWQAccess;		// Semaphore for work queue access
+	HANDLE m_hResetWorkQueue;	// Event which signals that the work queue is being reset - while signalled no operations should be performed on output queue. Set in ProcessMessage and reset in ProcessInput
 	AsyncCallback<CSampleGrabber> m_AnalysisStepCallback;
 	HRESULT BeginAnalysis();
 	HRESULT ConfigureAnalyzer();
 	HRESULT OnAnalysisStep(IMFAsyncResult *pResult);
+	HRESULT FastForwardQueueToPosition(REFERENCE_TIME position, IMFSample **ppSample);	// Removes samples before position and return ppSample if found
+	HRESULT FlushOutputQueue();
 };
 

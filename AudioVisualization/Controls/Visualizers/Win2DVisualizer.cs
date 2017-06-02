@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using Microsoft.Graphics.Canvas.Text;
 using AudioVisualization.Extensions;
+using Windows.Media;
 
 namespace AudioVisualization.Controls.Visualizers
 {
@@ -25,6 +26,7 @@ namespace AudioVisualization.Controls.Visualizers
         CanvasSwapChain _swapChain;
         SpriteVisual _swapChainVisual;
         CancellationTokenSource _drawLoopCancellationTokenSource;
+        object _swapChainLock;
 
 
         public Win2DVisualizer()
@@ -37,6 +39,8 @@ namespace AudioVisualization.Controls.Visualizers
             m_SpectralData = new float[][] { new float[800], new float[800] };
             m_SpectralPeakData = new float[][] { new float[80], new float[800] };
 
+            _swapChainLock = new object();
+
             CreateDevice();
             _swapChainVisual = _compositor.CreateSpriteVisual();
             _rootVisual.Children.InsertAtTop(_swapChainVisual);
@@ -46,7 +50,10 @@ namespace AudioVisualization.Controls.Visualizers
         {
             if (e != null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
-                SetDevice(_device, e.NewSize);
+                if (_swapChain == null)
+                    SetDevice(_device, e.NewSize);
+                else
+                    lock (_swapChainLock) { _swapChain.ResizeBuffers(e.NewSize); }
                 _swapChainVisual.Size = new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height);
             }
         }
@@ -115,7 +122,7 @@ namespace AudioVisualization.Controls.Visualizers
                 //sw.Start();
                 while (!canceled.IsCancellationRequested)
                 {
-                    DrawSwapChain(_swapChain);
+                    lock (_swapChainLock) { DrawSwapChain(_swapChain); }
                     _swapChain.WaitForVerticalBlank();
                 }
                 //sw.Stop();
@@ -156,20 +163,9 @@ namespace AudioVisualization.Controls.Visualizers
                     SampleGrabber.IMyInterface mft = (SampleGrabber.IMyInterface)PlayerService.Current.ReferencePropertySet["samplegrabber"];
 
                     var dataFrame = mft.GetFrame();
-                    if (dataFrame != null)
-                    {
-                        using (var data = dataFrame.AsVisualizationData())
-                        {
-                            DrawVU(ds, data.GetRMS(0), data.GetRMS(1));
-                            DrawSpectrogram(data, ds);
-                        }
-                        dataFrame.Dispose();
-                    }
-                    else
-                    {                        
-                        DrawVU(ds, -100.0f, -100.0f);
-                        DrawSpectrogram(null, ds);
-                    }
+                    Vector2 visualizationOffset = new Vector2(200, 20);
+                    Vector2 barSize = new Vector2(5, 150);
+                    DrawVisualization(dataFrame, ds, true, true, true, barSize,visualizationOffset);
                     // yuck
                     //lock (PassthroughEffect.GetBadLock())
                     /*
@@ -231,23 +227,56 @@ namespace AudioVisualization.Controls.Visualizers
             }
         }
 
-        private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds)
+        private void DrawVisualization(AudioFrame dataFrame, CanvasDrawingSession ds, bool bDrawVU, bool bDrawLeftChannel, bool bDrawRightChannel, Vector2 barSize,Vector2 offset)
         {
-            // Draw grid
-
-            ds.DrawRectangle(200, 25, 800, 200, Colors.Gray);
-            ds.DrawRectangle(200, 250, 800, 200, Colors.Gray);
-
-            for (int x = 0; x < 800; x+=16)
+            if (dataFrame != null)
             {
-                ds.DrawLine(x+200, 25, x+200, 225, Colors.LightGray);
-                ds.DrawLine(x+200, 250, x+200, 450, Colors.LightGray);
+                using (var data = dataFrame.AsVisualizationData())
+                {
+                    if (bDrawVU)
+                        DrawVU(ds, data.GetRMS(0), data.GetRMS(1));
+                    DrawSpectrogram(data, ds,bDrawLeftChannel,bDrawRightChannel,barSize,offset);
+                }
+                dataFrame.Dispose();
+            }
+            else
+            {
+                if (bDrawVU)
+                    DrawVU(ds, -100.0f, -100.0f);
+
+                DrawSpectrogram(null, ds, bDrawLeftChannel, bDrawRightChannel, barSize,offset);
+            }
+        }
+
+        private void DrawSpectrogram(VisualizationData data, CanvasDrawingSession ds,bool bDrawLeftChannel,bool bDrawRightChannel,Vector2 barSize,Vector2 offset)
+        {
+            int bars = 50;
+            // Draw grid
+            float verticalSpacing = 50;
+            float width = bars * barSize.X;
+            Vector2 vLeftOffset = offset;
+            Vector2 vRightOffset = offset + (bDrawLeftChannel ? new Vector2(0, verticalSpacing + barSize.Y) : Vector2.Zero);
+
+            
+            if (bDrawLeftChannel)
+                ds.DrawRectangle(vLeftOffset.X,vLeftOffset.Y, width, barSize.Y, Colors.Gray);
+            if (bDrawRightChannel)
+                ds.DrawRectangle(vRightOffset.X, vRightOffset.Y, width, barSize.Y, Colors.Gray);
+
+            for (float x = 0; x < width; x+=barSize.X)
+            {
+                if (bDrawLeftChannel)
+                    ds.DrawLine(x+vLeftOffset.X, vLeftOffset.Y, x + vLeftOffset.X, vLeftOffset.Y + barSize.Y, Colors.LightGray);
+                if (bDrawRightChannel)
+                    ds.DrawLine(x + vRightOffset.X, vRightOffset.Y, x + vRightOffset.X, vRightOffset.Y + barSize.Y, Colors.LightGray);
             }
 
-            for (int y=0;y<200;y+=20)
+            for (float y=0;y<barSize.Y;y+=(barSize.Y/10))
             {
-                ds.DrawLine(200, y + 25, 1000, y + 25, Colors.LightGray);
-                ds.DrawLine(200, y + 250, 1000, y + 250, Colors.LightGray);
+                if (bDrawLeftChannel)
+                    ds.DrawLine(vLeftOffset.X, vLeftOffset.Y + y, vLeftOffset.X + width, vLeftOffset.Y + y, Colors.LightGray);
+                if (bDrawRightChannel)
+                    ds.DrawLine(vRightOffset.X, vRightOffset.Y + y, vRightOffset.X + width, vRightOffset.Y + y, Colors.LightGray);
             }
 
             if (data == null)
@@ -256,15 +285,21 @@ namespace AudioVisualization.Controls.Visualizers
             if (data.Length != 112)
                 return;
 
-            // Draw 50 bars of width 16 pixels
-            for (uint i = 0; i < 50; i++)
+            float scaleFactor = barSize.Y / 100;
+            // Draw 50 bars 
+            for (uint index = 0; index < 50; index++)
             {
-                float xPos = i * 16 + 200;
-                float leftHeight = 2*data[data.GetChannelOffset(0) + i]+200;
-                ds.FillRectangle(xPos, 225 - leftHeight, 16, leftHeight, Colors.Orange);
-
-                float rightHeight = 2*data[data.GetChannelOffset(1) + i] + 200;
-                ds.FillRectangle(xPos, 250, 16, rightHeight, Colors.LimeGreen);
+                float xPos = index * barSize.X;
+                if (bDrawLeftChannel)
+                {
+                    float leftHeight = scaleFactor * data[data.GetChannelOffset(0) + index] + barSize.Y;
+                    ds.FillRectangle(xPos + vLeftOffset.X, vLeftOffset.Y + barSize.Y - leftHeight, barSize.X, leftHeight, Colors.Orange);
+                }
+                if (bDrawRightChannel)
+                {
+                    float rightHeight = scaleFactor * data[data.GetChannelOffset(1) + index] + barSize.Y;
+                    ds.FillRectangle(xPos +vRightOffset.X, vRightOffset.Y,barSize.X, rightHeight, Colors.LimeGreen);
+                }
             }
         }
 

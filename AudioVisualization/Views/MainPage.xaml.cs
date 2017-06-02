@@ -33,7 +33,7 @@ namespace AudioVisualization.Views
 
         private async void MainPage_Loaded(object sender, RoutedEventArgs e)
         {
-            StorageFile toneText = await StorageFile.GetFileFromApplicationUriAsync(new Uri(@"ms-appx:///Assets/LevelTest_mixdown.mp3"));
+            StorageFile toneText = await StorageFile.GetFileFromApplicationUriAsync(new Uri(@"ms-appx:///Assets/WUX-010_mid.mp4"));
             PlayerService.Current.Playlist.Clear();
             PlayerService.Current.Playlist.Add(await toneText.ToSong());
 
