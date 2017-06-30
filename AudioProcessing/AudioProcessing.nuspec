@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>AudioProcessing</id>
+    <version>1.0.0</version>
+    <title>AudioProcessing</title>
+    <authors>TonuAndJames</authors>
+    <owners>TonuAndJames</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>AudioProcessing</description>
+    <releaseNotes>InitialTestVersion</releaseNotes>
+    <copyright>Copyright 2017 TonuAndJames</copyright>
+    <tags>Spectrum</tags>
+  </metadata>
+ <files>
+   <file src="..\Debug\SampleGrabber\SampleGrabber.winmd" target="lib\uap10.0"/>
+   <file src="..\Debug\SampleGrabber\SampleGrabber.xml" target="lib\uap10.0"/>
+
+   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.dll"/>
+   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.pri"/>
+ </files>
+</package>
