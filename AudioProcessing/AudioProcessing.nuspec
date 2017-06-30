@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>AudioProcessing</id>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <title>AudioProcessing</title>
     <authors>TonuAndJames</authors>
     <owners>TonuAndJames</owners>
@@ -16,7 +16,7 @@
    <file src="..\Debug\SampleGrabber\SampleGrabber.winmd" target="lib\uap10.0"/>
    <file src="..\Debug\SampleGrabber\SampleGrabber.xml" target="lib\uap10.0"/>
 
-   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.dll"/>
-   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.pri"/>
+   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.dll"  target="runtimes\win10-x64\native"/>
+   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.pri" target="runtimes\win10-x64\native"/>
  </files>
 </package>
