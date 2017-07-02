@@ -13,13 +13,13 @@
     <tags>Spectrum</tags>
   </metadata>
  <files>
-   <file src="..\Debug\SampleGrabber\SampleGrabber.winmd" target="lib\uap10.0"/>
-   <file src="..\Debug\SampleGrabber\SampleGrabber.xml" target="lib\uap10.0"/>
+   <file src="..\Release\SampleGrabber\SampleGrabber.winmd" target="lib\uap10.0"/>
+   <file src="..\Release\SampleGrabber\SampleGrabber.xml" target="lib\uap10.0"/>
 
-   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.dll"  target="runtimes\win10-x64\native"/>
-   <file src="..\x64\Debug\SampleGrabber\SampleGrabber.pri" target="runtimes\win10-x64\native"/>
+   <file src="..\x64\Release\SampleGrabber\SampleGrabber.dll"  target="runtimes\win10-x64\native"/>
+   <file src="..\x64\Release\SampleGrabber\SampleGrabber.pri" target="runtimes\win10-x64\native"/>
 
-   <file src="..\Debug\SampleGrabber\SampleGrabber.dll"  target="runtimes\win10-x86\native"/>
-   <file src="..\Debug\SampleGrabber\SampleGrabber.pri" target="runtimes\win10-x86\native"/>
+   <file src="..\Release\SampleGrabber\SampleGrabber.dll"  target="runtimes\win10-x86\native"/>
+   <file src="..\Release\SampleGrabber\SampleGrabber.pri" target="runtimes\win10-x86\native"/>
  </files>
 </package>
